@@ -1,8 +1,9 @@
 import json
+import re
 import traceback
 
 import frappe
-from frappe.utils import now
+from frappe.utils import now, validate_phone_number
 
 from electrix_sync.api.stel import StelClient
 
@@ -117,7 +118,7 @@ def sync_customer(item, settings):
         if email and hasattr(doc, "email_id"):
             doc.email_id = email
 
-        phone = get_first(item, "phone", "phone2", "mobile", "mobileNo", "mobile_no", "telephone", "telefono")
+        phone = get_phone(item, "phone", "phone2", "mobile", "mobileNo", "mobile_no", "telephone", "telefono")
         if phone and hasattr(doc, "mobile_no"):
             doc.mobile_no = phone
 
@@ -166,7 +167,7 @@ def sync_lead(item, settings):
         doc.status = doc.get("status") or "Lead"
         doc.source = settings.default_lead_source or doc.get("source")
         doc.email_id = get_first(item, "email", "emailId", "email_id")
-        doc.mobile_no = get_first(item, "mobile", "mobileNo", "mobile_no", "phone", "phone2", "telephone", "telefono")
+        doc.mobile_no = get_phone(item, "mobile", "mobileNo", "mobile_no", "phone", "phone2", "telephone", "telefono")
         doc.custom_stel_id = stel_id
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
@@ -209,6 +210,35 @@ def get_first(item, *keys):
             return value
 
     return None
+
+
+def get_phone(item, *keys):
+    return clean_phone_number(get_first(item, *keys))
+
+
+def clean_phone_number(value):
+    if value in (None, ""):
+        return None
+
+    phone = str(value).strip().replace("\u00a0", " ")
+    phone = "".join(character for character in phone if character.isprintable())
+    phone = re.sub(r"[^\d+]", "", phone)
+
+    if phone.startswith("00"):
+        phone = f"+{phone[2:]}"
+    elif phone.startswith("+"):
+        digits = re.sub(r"\D", "", phone[1:])
+        phone = f"+{digits}"
+    else:
+        phone = re.sub(r"\D", "", phone)
+
+    if len(re.sub(r"\D", "", phone)) < 6:
+        return None
+
+    try:
+        return phone if validate_phone_number(phone, throw=False) else None
+    except Exception:
+        return None
 
 
 def mark_error(doctype, stel_id):
