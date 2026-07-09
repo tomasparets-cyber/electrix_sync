@@ -12,13 +12,19 @@ from electrix_sync.api.stel import StelClient
 def sync_all():
     settings = frappe.get_single("Electrix Sync Settings")
     if not settings.enabled:
-        return {"customers": {"skipped": "Sync disabled"}, "leads": {"skipped": "Sync disabled"}}
+        return {
+            "customers": {"skipped": "Sync disabled"},
+            "leads": {"skipped": "Sync disabled"},
+            "places": {"skipped": "Sync disabled"},
+        }
 
     result = {}
     if settings.sync_customers:
         result["customers"] = sync_customers()
     if settings.sync_leads:
         result["leads"] = sync_leads()
+    if getattr(settings, "sync_places", 0):
+        result["places"] = sync_places()
 
     return result
 
@@ -63,6 +69,32 @@ def sync_leads():
 
     for item in items:
         status = sync_lead(item, settings)
+        stats[status] += 1
+
+    frappe.db.commit()
+    return stats
+
+
+@frappe.whitelist()
+def sync_places():
+    settings = frappe.get_single("Electrix Sync Settings")
+    if not settings.enabled:
+        return {"skipped": "Sync disabled"}
+
+    if not frappe.db.exists("DocType", "Lugar"):
+        return {"skipped": "DocType Lugar not found"}
+
+    stats = {"created": 0, "updated": 0, "error": 0, "skipped": 0}
+
+    try:
+        items = StelClient(settings).get_addresses()
+    except Exception:
+        log_sync("Lugar", "Error", message="Could not fetch STEL addresses", error=traceback.format_exc())
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
+
+    for item in items:
+        status = sync_place(item)
         stats[status] += 1
 
     frappe.db.commit()
@@ -278,6 +310,61 @@ def sync_billing_address(item, customer_name):
         return "error"
 
 
+def sync_place(address_data):
+    stel_address_id = get_stel_id(address_data)
+    if not stel_address_id:
+        log_sync("Lugar", "Skipped", None, message="Missing STEL address ID", payload=address_data)
+        return "skipped"
+
+    if is_main_or_billing_address(address_data):
+        return "skipped"
+
+    if frappe.db.exists("Address", {"custom_stel_id": stel_address_id}):
+        return "skipped"
+
+    try:
+        existing = frappe.db.get_value("Lugar", {"custom_stel_id": stel_address_id}, "name")
+        place = frappe.get_doc("Lugar", existing) if existing else frappe.new_doc("Lugar")
+
+        place.nombre_lugar = get_place_name(address_data)
+        place.direccion = get_address_line1(address_data)
+        place.codigo_postal = get_first(address_data, "postal-code", "postalCode", "zip", "zipcode") or None
+        place.municipio = get_first(address_data, "city-town", "city", "localidad") or None
+        place.provincia = get_first(address_data, "province", "state", "provincia") or None
+        place.pais = get_place_country(address_data)
+        place.custom_stel_id = stel_address_id
+        place.custom_stel_last_sync = now()
+        place.custom_stel_sync_status = "Synced"
+
+        if existing:
+            place.save(ignore_permissions=True)
+            action = "updated"
+        else:
+            place.insert(ignore_permissions=True)
+            action = "created"
+
+        log_sync("Lugar", "Success", stel_address_id, "Lugar", place.name, f"Lugar {action}", payload=address_data)
+        return action
+    except Exception:
+        mark_error("Lugar", stel_address_id)
+        log_sync("Lugar", "Error", stel_address_id, message="Lugar sync failed", error=traceback.format_exc(), payload=address_data)
+        return "error"
+
+
+def is_main_or_billing_address(address_data):
+    address_type = (get_first(address_data, "address-type", "addressType") or "").upper()
+    address_type_name = (get_first(address_data, "address-type-name", "addressTypeName", "name") or "").strip().lower()
+
+    return address_type in {"DEFAULT", "BILLING"} or address_type_name in {"default", "billing", "facturacion", "facturación"}
+
+
+def get_place_name(address_data):
+    return (
+        get_first(address_data, "name", "address-type-name", "formatted-address", "address-data")
+        or f"STEL Lugar {get_stel_id(address_data)}"
+    )
+
+
 def get_address_title(address_data, customer_name):
     return get_first(address_data, "name", "address-type-name", "address-type") or customer_name
 
@@ -297,6 +384,20 @@ def get_country(address_data):
             return country
 
     return get_first(address_data, "country", "pais") or "Spain"
+
+
+def get_place_country(address_data):
+    raw_country = get_first(address_data, "country", "pais")
+    candidates = [get_country(address_data), raw_country, "Spain", "España"]
+    field = frappe.get_meta("Lugar").get_field("pais")
+    options = field.options if field else None
+
+    if options:
+        for candidate in candidates:
+            if candidate and frappe.db.exists(options, candidate):
+                return candidate
+
+    return candidates[0]
 
 
 def get_country_by_code(country_code):

@@ -19,6 +19,10 @@ class StelClient:
     def get_leads(self):
         return self.get_collection(self.settings.leads_endpoint)
 
+    def get_addresses(self):
+        endpoint = getattr(self.settings, "addresses_endpoint", None) or "/app/addresses"
+        return self.get_collection(endpoint)
+
     def get_collection(self, endpoint):
         if not endpoint:
             return []

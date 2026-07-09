@@ -14,6 +14,7 @@
     "auth_header_prefix",
     "customers_endpoint",
     "leads_endpoint",
+    "addresses_endpoint",
     "page_limit",
     "mapping_section",
     "default_customer_group",
@@ -21,7 +22,8 @@
     "default_lead_source",
     "scheduler_section",
     "sync_customers",
-    "sync_leads"
+    "sync_leads",
+    "sync_places"
   ],
   "fields": [
     {
@@ -70,6 +72,12 @@
       "label": "Leads Endpoint"
     },
     {
+      "default": "/app/addresses",
+      "fieldname": "addresses_endpoint",
+      "fieldtype": "Data",
+      "label": "Addresses Endpoint"
+    },
+    {
       "default": "500",
       "fieldname": "page_limit",
       "fieldtype": "Int",
@@ -114,6 +122,12 @@
       "fieldname": "sync_leads",
       "fieldtype": "Check",
       "label": "Sync Leads"
+    },
+    {
+      "default": "1",
+      "fieldname": "sync_places",
+      "fieldtype": "Check",
+      "label": "Sync Places"
     }
   ],
   "index_web_pages_for_search": 1,

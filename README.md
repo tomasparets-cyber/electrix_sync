@@ -11,9 +11,9 @@ Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer`
 - Creates or updates ERPNext `Customer` records.
 - Creates or updates ERPNext `Lead` records.
 - Creates or updates the STEL `main-address` as an ERPNext billing `Address` linked to the `Customer`.
+- Creates or updates secondary STEL addresses as custom ERPNext `Lugar` records, without linking them to `Customer`.
 - Stores sync errors and payloads in `Electrix Sync Log`.
-- Does not sync secondary STEL addresses, contacts, quotations, invoices, or accounting documents.
-- Secondary STEL addresses should be mapped later to the custom ERPNext `Lugares` DocType, without linking them to `Customer`.
+- Does not sync contacts, quotations, invoices, or accounting documents.
 
 ## STEL API Defaults
 
@@ -28,13 +28,14 @@ Use these values in `Electrix Sync Settings`:
 - Auth Header Prefix: leave empty
 - Customers Endpoint: `/app/clients`
 - Leads Endpoint: `/app/potentialClients`
+- Addresses Endpoint: `/app/addresses`
 - Page Limit: `500`
 
 The OpenAPI document says list requests are limited to 100 records by default and can be increased to 500 using `limit`. This app paginates with `start` and `limit`.
 
 ## ERPNext Fields
 
-The installer creates these custom fields on `Customer`, `Lead`, and `Address`:
+The installer creates these custom fields on `Customer`, `Lead`, `Address`, and `Lugar` when that custom DocType exists:
 
 - `custom_stel_id`: Data, unique
 - `custom_stel_last_sync`: Datetime
@@ -55,6 +56,7 @@ Then open **Electrix Sync Settings**, enter the STEL API token, confirm the defa
 ```bash
 bench --site your-site execute electrix_sync.api.sync.sync_customers
 bench --site your-site execute electrix_sync.api.sync.sync_leads
+bench --site your-site execute electrix_sync.api.sync.sync_places
 bench --site your-site execute electrix_sync.api.sync.sync_all
 ```
 
