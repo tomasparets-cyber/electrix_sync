@@ -3,7 +3,7 @@ import re
 import traceback
 
 import frappe
-from frappe.utils import now, validate_phone_number
+from frappe.utils import now, today, validate_email_address, validate_phone_number
 
 from electrix_sync.api.stel import StelClient
 
@@ -16,9 +16,12 @@ def sync_all():
             "customers": {"skipped": "Sync disabled"},
             "leads": {"skipped": "Sync disabled"},
             "places": {"skipped": "Sync disabled"},
+            "employees": {"skipped": "Sync disabled"},
         }
 
     result = {}
+    if getattr(settings, "sync_employees", 0):
+        result["employees"] = sync_employees()
     if settings.sync_customers:
         result["customers"] = sync_customers()
     if settings.sync_leads:
@@ -46,6 +49,32 @@ def sync_customers():
 
     for item in items:
         status = sync_customer(item, settings)
+        stats[status] += 1
+
+    frappe.db.commit()
+    return stats
+
+
+@frappe.whitelist()
+def sync_employees():
+    settings = frappe.get_single("Electrix Sync Settings")
+    if not settings.enabled:
+        return {"skipped": "Sync disabled"}
+
+    if not frappe.db.exists("DocType", "Employee"):
+        return {"skipped": "DocType Employee not found"}
+
+    stats = {"created": 0, "updated": 0, "error": 0, "skipped": 0}
+
+    try:
+        items = StelClient(settings).get_employees()
+    except Exception:
+        log_sync("Employee", "Error", message="Could not fetch STEL employees", error=traceback.format_exc())
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
+
+    for item in items:
+        status = sync_employee(item, settings)
         stats[status] += 1
 
     frappe.db.commit()
@@ -219,6 +248,178 @@ def sync_lead(item, settings):
         mark_error("Lead", stel_id)
         log_sync("Lead", "Error", stel_id, message="Lead sync failed", error=traceback.format_exc(), payload=item)
         return "error"
+
+
+def sync_employee(item, settings):
+    stel_id = get_stel_id(item)
+    if not stel_id:
+        log_sync("Employee", "Skipped", None, message="Missing STEL ID", payload=item)
+        return "skipped"
+
+    try:
+        if item.get("deleted") is True:
+            return sync_deleted_employee(stel_id, item)
+
+        email = get_valid_email(get_first(item, "email", "user-name", "username", "userName"))
+        user_name = sync_user(item, settings, stel_id, email) if email and getattr(settings, "create_users", 1) else None
+
+        existing = frappe.db.get_value("Employee", {"custom_stel_id": stel_id}, "name")
+        doc = frappe.get_doc("Employee", existing) if existing else frappe.new_doc("Employee")
+
+        first_name, last_name = get_employee_names(item, stel_id)
+        doc.first_name = first_name
+        if hasattr(doc, "last_name"):
+            doc.last_name = last_name
+        doc.employee_name = " ".join(part for part in (first_name, last_name) if part).strip()
+        doc.company = get_default_company(doc)
+        doc.status = "Active"
+        if not doc.get("date_of_joining") and hasattr(doc, "date_of_joining"):
+            doc.date_of_joining = today()
+        if user_name and hasattr(doc, "user_id"):
+            doc.user_id = user_name
+        if email and hasattr(doc, "personal_email"):
+            doc.personal_email = email
+        phone = get_phone(item, "phone", "phone2", "mobile", "mobileNo", "mobile_no", "telephone", "telefono")
+        if phone and hasattr(doc, "cell_number"):
+            doc.cell_number = phone
+        position = get_first(item, "position", "puesto")
+        if position and hasattr(doc, "designation"):
+            doc.designation = get_or_create_designation(position)
+
+        doc.custom_stel_id = stel_id
+        doc.custom_stel_last_sync = now()
+        doc.custom_stel_sync_status = "Synced"
+
+        if existing:
+            doc.save(ignore_permissions=True)
+            action = "updated"
+        else:
+            doc.insert(ignore_permissions=True)
+            action = "created"
+
+        log_sync("Employee", "Success", stel_id, "Employee", doc.name, f"Employee {action}", payload=item)
+        return action
+    except Exception:
+        mark_error("Employee", stel_id)
+        log_sync("Employee", "Error", stel_id, message="Employee sync failed", error=traceback.format_exc(), payload=item)
+        return "error"
+
+
+def sync_user(item, settings, stel_id, email):
+    existing = (
+        frappe.db.get_value("User", {"custom_stel_id": stel_id}, "name")
+        or frappe.db.get_value("User", {"email": email}, "name")
+    )
+    user = frappe.get_doc("User", existing) if existing else frappe.new_doc("User")
+
+    first_name, last_name = get_employee_names(item, stel_id)
+    user.email = email
+    user.username = get_first(item, "user-name", "username", "userName") or email
+    user.first_name = first_name
+    if hasattr(user, "last_name"):
+        user.last_name = last_name
+    user.enabled = 0 if item.get("deleted") is True else 1
+    if hasattr(user, "send_welcome_email"):
+        user.send_welcome_email = 0
+    phone = get_phone(item, "phone", "phone2", "mobile", "mobileNo", "mobile_no", "telephone", "telefono")
+    if phone and hasattr(user, "mobile_no"):
+        user.mobile_no = phone
+    user.custom_stel_id = stel_id
+    user.custom_stel_last_sync = now()
+    user.custom_stel_sync_status = "Synced"
+
+    if existing:
+        user.save(ignore_permissions=True)
+        action = "updated"
+    else:
+        user.insert(ignore_permissions=True)
+        action = "created"
+
+    log_sync("User", "Success", stel_id, "User", user.name, f"User {action}", payload=item)
+    return user.name
+
+
+def sync_deleted_employee(stel_id, item):
+    user_name = frappe.db.get_value("User", {"custom_stel_id": stel_id}, "name")
+    if user_name:
+        frappe.db.set_value(
+            "User",
+            user_name,
+            {
+                "enabled": 0,
+                "custom_stel_last_sync": now(),
+                "custom_stel_sync_status": "Skipped",
+            },
+            update_modified=False,
+        )
+
+    employee_name = frappe.db.get_value("Employee", {"custom_stel_id": stel_id}, "name")
+    if employee_name:
+        frappe.db.set_value(
+            "Employee",
+            employee_name,
+            {
+                "status": "Inactive",
+                "custom_stel_last_sync": now(),
+                "custom_stel_sync_status": "Skipped",
+            },
+            update_modified=False,
+        )
+        log_sync("Employee", "Skipped", stel_id, "Employee", employee_name, "STEL employee is deleted", payload=item)
+        return "updated"
+
+    log_sync("Employee", "Skipped", stel_id, message="STEL employee is deleted", payload=item)
+    return "skipped"
+
+
+def get_employee_names(item, stel_id):
+    first_name = get_first(item, "name", "firstName", "first_name", "nombre")
+    last_name = get_first(item, "surname", "lastName", "last_name", "apellidos")
+
+    if not first_name:
+        full_name = get_first(item, "full-name", "fullName", "employeeName")
+        if full_name:
+            parts = str(full_name).strip().split(" ", 1)
+            first_name = parts[0]
+            last_name = last_name or (parts[1] if len(parts) > 1 else None)
+
+    if not first_name:
+        email = get_first(item, "email", "user-name", "username", "userName")
+        first_name = str(email).split("@", 1)[0] if email else f"STEL Employee {stel_id}"
+
+    return str(first_name).strip(), str(last_name).strip() if last_name else ""
+
+
+def get_default_company(doc):
+    return doc.get("company") or frappe.defaults.get_user_default("Company") or frappe.db.get_single_value(
+        "Global Defaults", "default_company"
+    ) or frappe.db.get_value("Company", {}, "name")
+
+
+def get_valid_email(value):
+    if not value:
+        return None
+
+    email = str(value).strip()
+    try:
+        return email if validate_email_address(email, throw=False) else None
+    except Exception:
+        return None
+
+
+def get_or_create_designation(position):
+    position = str(position).strip()
+    if not position:
+        return None
+
+    if frappe.db.exists("Designation", position):
+        return position
+
+    try:
+        frappe.get_doc({"doctype": "Designation", "designation_name": position}).insert(ignore_permissions=True)
+        return position
+    except Exception:
+        return None
 
 
 def get_stel_id(item):

@@ -15,6 +15,7 @@
     "customers_endpoint",
     "leads_endpoint",
     "addresses_endpoint",
+    "employees_endpoint",
     "page_limit",
     "mapping_section",
     "default_customer_group",
@@ -23,7 +24,9 @@
     "scheduler_section",
     "sync_customers",
     "sync_leads",
-    "sync_places"
+    "sync_places",
+    "sync_employees",
+    "create_users"
   ],
   "fields": [
     {
@@ -78,6 +81,12 @@
       "label": "Addresses Endpoint"
     },
     {
+      "default": "/app/employees",
+      "fieldname": "employees_endpoint",
+      "fieldtype": "Data",
+      "label": "Employees Endpoint"
+    },
+    {
       "default": "500",
       "fieldname": "page_limit",
       "fieldtype": "Int",
@@ -128,6 +137,18 @@
       "fieldname": "sync_places",
       "fieldtype": "Check",
       "label": "Sync Places"
+    },
+    {
+      "default": "1",
+      "fieldname": "sync_employees",
+      "fieldtype": "Check",
+      "label": "Sync Employees"
+    },
+    {
+      "default": "1",
+      "fieldname": "create_users",
+      "fieldtype": "Check",
+      "label": "Create Users for Employees"
     }
   ],
   "index_web_pages_for_search": 1,

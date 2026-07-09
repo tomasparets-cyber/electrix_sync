@@ -93,7 +93,63 @@ def create_custom_fields():
                 "no_copy": 1,
             },
         ],
+        "User": [
+            {
+                "fieldname": "custom_stel_id",
+                "label": "STEL ID",
+                "fieldtype": "Data",
+                "insert_after": "email",
+                "unique": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_last_sync",
+                "label": "STEL Last Sync",
+                "fieldtype": "Datetime",
+                "insert_after": "custom_stel_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_sync_status",
+                "label": "STEL Sync Status",
+                "fieldtype": "Select",
+                "options": SYNC_STATUS_OPTIONS,
+                "insert_after": "custom_stel_last_sync",
+                "default": "Pending",
+                "no_copy": 1,
+            },
+        ],
     }
+
+    if frappe.db.exists("DocType", "Employee"):
+        custom_fields["Employee"] = [
+            {
+                "fieldname": "custom_stel_id",
+                "label": "STEL ID",
+                "fieldtype": "Data",
+                "insert_after": "employee_name",
+                "unique": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_last_sync",
+                "label": "STEL Last Sync",
+                "fieldtype": "Datetime",
+                "insert_after": "custom_stel_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_sync_status",
+                "label": "STEL Sync Status",
+                "fieldtype": "Select",
+                "options": SYNC_STATUS_OPTIONS,
+                "insert_after": "custom_stel_last_sync",
+                "default": "Pending",
+                "no_copy": 1,
+            },
+        ]
 
     if frappe.db.exists("DocType", "Lugar"):
         custom_fields["Lugar"] = [
@@ -129,12 +185,17 @@ def create_custom_fields():
     frappe.clear_cache(doctype="Customer")
     frappe.clear_cache(doctype="Lead")
     frappe.clear_cache(doctype="Address")
+    frappe.clear_cache(doctype="User")
+    if frappe.db.exists("DocType", "Employee"):
+        frappe.clear_cache(doctype="Employee")
     if frappe.db.exists("DocType", "Lugar"):
         frappe.clear_cache(doctype="Lugar")
 
 
 def create_unique_indexes():
-    doctypes = ["Customer", "Lead", "Address"]
+    doctypes = ["Customer", "Lead", "Address", "User"]
+    if frappe.db.exists("DocType", "Employee"):
+        doctypes.append("Employee")
     if frappe.db.exists("DocType", "Lugar"):
         doctypes.append("Lugar")
 

@@ -23,6 +23,10 @@ class StelClient:
         endpoint = getattr(self.settings, "addresses_endpoint", None) or "/app/addresses"
         return self.get_collection(endpoint)
 
+    def get_employees(self):
+        endpoint = getattr(self.settings, "employees_endpoint", None) or "/app/employees"
+        return self.get_collection(endpoint)
+
     def get_collection(self, endpoint):
         if not endpoint:
             return []
@@ -69,7 +73,7 @@ class StelClient:
         if not isinstance(data, dict):
             return []
 
-        for key in ("data", "items", "results", "customers", "clients", "leads"):
+        for key in ("data", "items", "results", "customers", "clients", "leads", "employees"):
             value = data.get(key)
             if isinstance(value, list):
                 return value

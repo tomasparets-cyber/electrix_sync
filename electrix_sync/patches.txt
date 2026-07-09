@@ -1,3 +1,4 @@
 electrix_sync.patches.v1_0.create_sync_fields
 electrix_sync.patches.v1_0.add_address_sync_fields
 electrix_sync.patches.v1_0.add_place_sync_fields
+electrix_sync.patches.v1_0.add_employee_sync_fields
