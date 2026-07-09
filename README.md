@@ -1,6 +1,6 @@
 # Electrix Sync
 
-Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer`, potential clients into ERPNext `Lead`, and STEL employees into ERPNext `Employee`/`User`.
+Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer`, potential clients into ERPNext `Lead`, employees into ERPNext `Employee`/`User`, incidents into `Task`, and events into `Event`.
 
 ## Scope
 
@@ -15,8 +15,10 @@ Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer`
 - Creates or updates secondary STEL addresses as custom ERPNext `Lugar` records, without linking them to `Customer`.
 - Creates or updates STEL employees as ERPNext `Employee` records.
 - Creates or updates ERPNext `User` records for STEL employees with a valid email, and links them from `Employee.user_id`.
+- Creates or updates STEL incidents as ERPNext `Task` records.
+- Creates or updates STEL events as ERPNext `Event` records.
 - Stores sync errors and payloads in `Electrix Sync Log`.
-- Does not sync contacts, incidents, events, quotations, invoices, or accounting documents.
+- Does not sync contacts, quotations, invoices, or accounting documents.
 - Does not copy STEL passwords into ERPNext. Users should set/reset their ERPNext password through ERPNext.
 
 ## STEL API Defaults
@@ -34,6 +36,8 @@ Use these values in `Electrix Sync Settings`:
 - Leads Endpoint: `/app/potentialClients`
 - Addresses Endpoint: `/app/addresses`
 - Employees Endpoint: `/app/employees`
+- Incidents Endpoint: `/app/incidents`
+- Events Endpoint: `/app/events`
 - Page Limit: `500`
 - Default Employee Date of Birth: `1900-01-01` unless you prefer another placeholder.
 
@@ -41,7 +45,7 @@ The OpenAPI document says list requests are limited to 100 records by default an
 
 ## ERPNext Fields
 
-The installer creates these custom fields on `Customer`, `Lead`, `Address`, `Employee`, `User`, and `Lugar` when that custom DocType exists:
+The installer creates these custom fields on `Customer`, `Lead`, `Address`, `Employee`, `User`, `Task`, `Event`, and `Lugar` when that custom DocType exists:
 
 - `custom_stel_id`: Data, unique
 - `custom_stel_last_sync`: Datetime
@@ -64,6 +68,8 @@ bench --site your-site execute electrix_sync.api.sync.sync_customers
 bench --site your-site execute electrix_sync.api.sync.sync_leads
 bench --site your-site execute electrix_sync.api.sync.sync_places
 bench --site your-site execute electrix_sync.api.sync.sync_employees
+bench --site your-site execute electrix_sync.api.sync.sync_incidents
+bench --site your-site execute electrix_sync.api.sync.sync_events
 bench --site your-site execute electrix_sync.api.sync.sync_all
 ```
 

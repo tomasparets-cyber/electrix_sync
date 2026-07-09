@@ -4,6 +4,7 @@ import traceback
 
 import frappe
 from frappe.utils import now, today, validate_email_address, validate_phone_number
+from frappe.utils.data import get_datetime
 
 from electrix_sync.api.stel import StelClient
 
@@ -17,6 +18,8 @@ def sync_all():
             "leads": {"skipped": "Sync disabled"},
             "places": {"skipped": "Sync disabled"},
             "employees": {"skipped": "Sync disabled"},
+            "incidents": {"skipped": "Sync disabled"},
+            "events": {"skipped": "Sync disabled"},
         }
 
     result = {}
@@ -28,6 +31,10 @@ def sync_all():
         result["leads"] = sync_leads()
     if getattr(settings, "sync_places", 0):
         result["places"] = sync_places()
+    if getattr(settings, "sync_incidents", 0):
+        result["incidents"] = sync_incidents()
+    if getattr(settings, "sync_events", 0):
+        result["events"] = sync_events()
 
     return result
 
@@ -124,6 +131,52 @@ def sync_places():
 
     for item in items:
         status = sync_place(item)
+        stats[status] += 1
+
+    frappe.db.commit()
+    return stats
+
+
+@frappe.whitelist()
+def sync_incidents():
+    settings = frappe.get_single("Electrix Sync Settings")
+    if not settings.enabled:
+        return {"skipped": "Sync disabled"}
+
+    stats = {"created": 0, "updated": 0, "error": 0, "skipped": 0}
+
+    try:
+        items = StelClient(settings).get_incidents()
+    except Exception:
+        log_sync("Incident", "Error", message="Could not fetch STEL incidents", error=traceback.format_exc())
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
+
+    for item in items:
+        status = sync_incident(item)
+        stats[status] += 1
+
+    frappe.db.commit()
+    return stats
+
+
+@frappe.whitelist()
+def sync_events():
+    settings = frappe.get_single("Electrix Sync Settings")
+    if not settings.enabled:
+        return {"skipped": "Sync disabled"}
+
+    stats = {"created": 0, "updated": 0, "error": 0, "skipped": 0}
+
+    try:
+        items = StelClient(settings).get_events()
+    except Exception:
+        log_sync("Event", "Error", message="Could not fetch STEL events", error=traceback.format_exc())
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
+
+    for item in items:
+        status = sync_event(item)
         stats[status] += 1
 
     frappe.db.commit()
@@ -247,6 +300,89 @@ def sync_lead(item, settings):
     except Exception:
         mark_error("Lead", stel_id)
         log_sync("Lead", "Error", stel_id, message="Lead sync failed", error=traceback.format_exc(), payload=item)
+        return "error"
+
+
+def sync_incident(item):
+    stel_id = get_stel_id(item)
+    if not stel_id:
+        log_sync("Incident", "Skipped", None, message="Missing STEL ID", payload=item)
+        return "skipped"
+
+    try:
+        if item.get("deleted") is True:
+            return sync_deleted_incident(stel_id, item)
+
+        existing = frappe.db.get_value("Task", {"custom_stel_id": stel_id}, "name")
+        doc = frappe.get_doc("Task", existing) if existing else frappe.new_doc("Task")
+
+        doc.subject = get_incident_subject(item, stel_id)
+        doc.status = get_task_status(item)
+        doc.priority = get_task_priority(item)
+        if has_field(doc, "exp_start_date"):
+            doc.exp_start_date = normalize_date(get_first(item, "assigned-date", "date", "creation-date"))
+        if has_field(doc, "exp_end_date"):
+            doc.exp_end_date = normalize_date(get_first(item, "closing-date", "date"))
+        doc.description = build_incident_description(item)
+        doc.custom_stel_id = stel_id
+        doc.custom_stel_last_sync = now()
+        doc.custom_stel_sync_status = "Synced"
+
+        if existing:
+            doc.save(ignore_permissions=True)
+            action = "updated"
+        else:
+            doc.insert(ignore_permissions=True)
+            action = "created"
+
+        assign_doc_to_employee(doc.doctype, doc.name, get_first(item, "assignee-id"))
+        log_sync("Incident", "Success", stel_id, "Task", doc.name, f"Task {action}", payload=item)
+        return action
+    except Exception:
+        mark_error("Task", stel_id)
+        log_sync("Incident", "Error", stel_id, message="Incident sync failed", error=traceback.format_exc(), payload=item)
+        return "error"
+
+
+def sync_event(item):
+    stel_id = get_stel_id(item)
+    if not stel_id:
+        log_sync("Event", "Skipped", None, message="Missing STEL ID", payload=item)
+        return "skipped"
+
+    try:
+        if item.get("deleted") is True:
+            return sync_deleted_event(stel_id, item)
+
+        existing = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name")
+        doc = frappe.get_doc("Event", existing) if existing else frappe.new_doc("Event")
+
+        doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
+        doc.event_type = "Private"
+        doc.starts_on = normalize_datetime(get_first(item, "start-date", "startDate", "date"))
+        doc.ends_on = normalize_datetime(get_first(item, "end-date", "endDate", "start-date", "date"))
+        if has_field(doc, "all_day"):
+            doc.all_day = 1 if item.get("all-day") is True else 0
+        if has_field(doc, "status"):
+            doc.status = get_event_status(item)
+        doc.description = build_event_description(item)
+        doc.custom_stel_id = stel_id
+        doc.custom_stel_last_sync = now()
+        doc.custom_stel_sync_status = "Synced"
+
+        if existing:
+            doc.save(ignore_permissions=True)
+            action = "updated"
+        else:
+            doc.insert(ignore_permissions=True)
+            action = "created"
+
+        add_event_participant(doc, get_first(item, "creator-id"))
+        log_sync("Event", "Success", stel_id, "Event", doc.name, f"Event {action}", payload=item)
+        return action
+    except Exception:
+        mark_error("Event", stel_id)
+        log_sync("Event", "Error", stel_id, message="Event sync failed", error=traceback.format_exc(), payload=item)
         return "error"
 
 
@@ -394,6 +530,201 @@ def get_employee_names(item, stel_id):
     return str(first_name).strip(), str(last_name).strip() if last_name else ""
 
 
+def get_incident_subject(item, stel_id):
+    reference = get_first(item, "full-reference", "reference")
+    description = get_first(item, "description")
+    if reference and description:
+        return f"{reference} - {description}"[:140]
+    return (reference or description or f"STEL Incident {stel_id}")[:140]
+
+
+def get_task_status(item):
+    if item.get("deleted") is True:
+        return "Cancelled"
+    if get_first(item, "closing-date", "resolution"):
+        return "Completed"
+    return "Open"
+
+
+def get_task_priority(item):
+    priority = (get_first(item, "priority") or "").strip().upper()
+    if priority in {"HIGH", "URGENT"}:
+        return "High"
+    if priority == "LOW":
+        return "Low"
+    return "Medium"
+
+
+def get_event_status(item):
+    state = (get_first(item, "event-state") or "").strip().upper()
+    if state in {"CANCELLED", "CANCELED"}:
+        return "Cancelled"
+    if state in {"CLOSED", "DONE", "COMPLETED"}:
+        return "Closed"
+    return "Open"
+
+
+def build_incident_description(item):
+    customer = get_customer_by_stel_id(get_first(item, "account-id"))
+    place = get_place_by_stel_id(get_first(item, "address-id"))
+    address = get_address_by_stel_id(get_first(item, "address-id"))
+    assignee = get_employee_by_stel_id(get_first(item, "assignee-id"))
+
+    lines = [
+        get_first(item, "description"),
+        "",
+        f"STEL reference: {get_first(item, 'full-reference', 'reference') or ''}",
+        f"STEL incident ID: {get_stel_id(item)}",
+        f"Customer: {customer or get_first(item, 'account-id') or ''}",
+        f"Lugar/Address: {place or address or get_first(item, 'address-id') or ''}",
+        f"Assignee: {assignee or get_first(item, 'assignee-id') or ''}",
+        f"Phone: {get_first(item, 'phone') or ''}",
+        f"Resolution: {get_first(item, 'resolution') or ''}",
+    ]
+    return "\n".join(line for line in lines if line is not None).strip()
+
+
+def build_event_description(item):
+    customer = get_customer_by_stel_id(get_first(item, "account-id"))
+    incident_task = get_task_by_stel_id(get_first(item, "incident-id"))
+    creator = get_employee_by_stel_id(get_first(item, "creator-id"))
+
+    lines = [
+        get_first(item, "description"),
+        "",
+        f"STEL event ID: {get_stel_id(item)}",
+        f"Customer: {customer or get_first(item, 'account-id') or ''}",
+        f"Incident task: {incident_task or get_first(item, 'incident-id') or ''}",
+        f"Creator: {creator or get_first(item, 'creator-id') or ''}",
+        f"Calendar ID: {get_first(item, 'calendar-id') or ''}",
+        f"Location: {get_first(item, 'location') or ''}",
+    ]
+    return "\n".join(line for line in lines if line is not None).strip()
+
+
+def sync_deleted_event(stel_id, item):
+    event_name = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name")
+    if event_name:
+        values = {"custom_stel_last_sync": now(), "custom_stel_sync_status": "Skipped"}
+        if frappe.get_meta("Event").has_field("status"):
+            values["status"] = "Cancelled"
+        frappe.db.set_value("Event", event_name, values, update_modified=False)
+        log_sync("Event", "Skipped", stel_id, "Event", event_name, "STEL event is deleted", payload=item)
+        return "updated"
+
+    log_sync("Event", "Skipped", stel_id, message="STEL event is deleted", payload=item)
+    return "skipped"
+
+
+def sync_deleted_incident(stel_id, item):
+    task_name = frappe.db.get_value("Task", {"custom_stel_id": stel_id}, "name")
+    if task_name:
+        frappe.db.set_value(
+            "Task",
+            task_name,
+            {
+                "status": "Cancelled",
+                "custom_stel_last_sync": now(),
+                "custom_stel_sync_status": "Skipped",
+            },
+            update_modified=False,
+        )
+        log_sync("Incident", "Skipped", stel_id, "Task", task_name, "STEL incident is deleted", payload=item)
+        return "updated"
+
+    log_sync("Incident", "Skipped", stel_id, message="STEL incident is deleted", payload=item)
+    return "skipped"
+
+
+def assign_doc_to_employee(doctype, name, stel_employee_id):
+    user = get_user_by_stel_employee_id(stel_employee_id)
+    if not user:
+        return
+
+    if frappe.db.exists(
+        "ToDo",
+        {
+            "allocated_to": user,
+            "reference_type": doctype,
+            "reference_name": name,
+            "status": "Open",
+        },
+    ):
+        return
+
+    try:
+        from frappe.desk.form import assign_to
+
+        assign_to.add(
+            {
+                "assign_to": [user],
+                "doctype": doctype,
+                "name": name,
+                "description": "Assigned from STEL Order",
+            }
+        )
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Could not assign {doctype} {name} to {user}")
+
+
+def add_event_participant(doc, stel_employee_id):
+    user = get_user_by_stel_employee_id(stel_employee_id)
+    if not user or not has_field(doc, "event_participants"):
+        return
+
+    for participant in doc.get("event_participants", []):
+        if participant.reference_doctype == "User" and participant.reference_docname == user:
+            return
+
+    try:
+        doc.append("event_participants", {"reference_doctype": "User", "reference_docname": user})
+        doc.save(ignore_permissions=True)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Could not add Event participant {user}")
+
+
+def get_user_by_stel_employee_id(stel_employee_id):
+    if not stel_employee_id:
+        return None
+
+    return frappe.db.get_value("User", {"custom_stel_id": str(stel_employee_id)}, "name")
+
+
+def get_employee_by_stel_id(stel_employee_id):
+    if not stel_employee_id or not frappe.db.exists("DocType", "Employee"):
+        return None
+
+    return frappe.db.get_value("Employee", {"custom_stel_id": str(stel_employee_id)}, "name")
+
+
+def get_customer_by_stel_id(stel_customer_id):
+    if not stel_customer_id:
+        return None
+
+    return frappe.db.get_value("Customer", {"custom_stel_id": str(stel_customer_id)}, "name")
+
+
+def get_place_by_stel_id(stel_address_id):
+    if not stel_address_id or not frappe.db.exists("DocType", "Lugar"):
+        return None
+
+    return frappe.db.get_value("Lugar", {"custom_stel_id": str(stel_address_id)}, "name")
+
+
+def get_address_by_stel_id(stel_address_id):
+    if not stel_address_id:
+        return None
+
+    return frappe.db.get_value("Address", {"custom_stel_id": str(stel_address_id)}, "name")
+
+
+def get_task_by_stel_id(stel_incident_id):
+    if not stel_incident_id:
+        return None
+
+    return frappe.db.get_value("Task", {"custom_stel_id": str(stel_incident_id)}, "name")
+
+
 def get_default_company(doc):
     return doc.get("company") or frappe.defaults.get_user_default("Company") or frappe.db.get_single_value(
         "Global Defaults", "default_company"
@@ -463,6 +794,17 @@ def normalize_date(value):
         return None
 
     return str(value).strip()[:10]
+
+
+def normalize_datetime(value):
+    if not value:
+        return now()
+
+    try:
+        return get_datetime(value).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        value = str(value).strip().replace("T", " ")
+        return value[:19]
 
 
 def get_valid_email(value):

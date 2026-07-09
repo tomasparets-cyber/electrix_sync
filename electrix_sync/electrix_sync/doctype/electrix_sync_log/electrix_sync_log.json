@@ -21,7 +21,7 @@
       "fieldtype": "Select",
       "in_list_view": 1,
       "label": "Sync Type",
-      "options": "Customer\nLead\nAddress\nLugar\nEmployee\nUser"
+      "options": "Customer\nLead\nAddress\nLugar\nEmployee\nUser\nIncident\nEvent"
     },
     {
       "fieldname": "status",

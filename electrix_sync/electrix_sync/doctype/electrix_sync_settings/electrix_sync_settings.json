@@ -16,6 +16,8 @@
     "leads_endpoint",
     "addresses_endpoint",
     "employees_endpoint",
+    "incidents_endpoint",
+    "events_endpoint",
     "page_limit",
     "mapping_section",
     "default_customer_group",
@@ -30,6 +32,8 @@
     "sync_leads",
     "sync_places",
     "sync_employees",
+    "sync_incidents",
+    "sync_events",
     "create_users"
   ],
   "fields": [
@@ -89,6 +93,18 @@
       "fieldname": "employees_endpoint",
       "fieldtype": "Data",
       "label": "Employees Endpoint"
+    },
+    {
+      "default": "/app/incidents",
+      "fieldname": "incidents_endpoint",
+      "fieldtype": "Data",
+      "label": "Incidents Endpoint"
+    },
+    {
+      "default": "/app/events",
+      "fieldname": "events_endpoint",
+      "fieldtype": "Data",
+      "label": "Events Endpoint"
     },
     {
       "default": "500",
@@ -169,6 +185,18 @@
       "fieldname": "sync_employees",
       "fieldtype": "Check",
       "label": "Sync Employees"
+    },
+    {
+      "default": "1",
+      "fieldname": "sync_incidents",
+      "fieldtype": "Check",
+      "label": "Sync Incidents"
+    },
+    {
+      "default": "1",
+      "fieldname": "sync_events",
+      "fieldtype": "Check",
+      "label": "Sync Events"
     },
     {
       "default": "1",
