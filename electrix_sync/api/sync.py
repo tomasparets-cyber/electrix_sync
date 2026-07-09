@@ -129,6 +129,8 @@ def sync_customer(item, settings):
             doc.insert(ignore_permissions=True)
             action = "created"
 
+        sync_billing_address(item, doc.name)
+
         log_sync("Customer", "Success", stel_id, "Customer", doc.name, f"Customer {action}", payload=item)
         return action
     except Exception:
@@ -220,6 +222,103 @@ def get_non_group_customer_group(customer_group):
 
 def get_territory(settings, doc):
     return settings.default_territory or doc.get("territory") or "All Territories"
+
+
+def sync_billing_address(item, customer_name):
+    address_data = item.get("main-address") if isinstance(item, dict) else None
+    if not isinstance(address_data, dict):
+        return None
+
+    stel_address_id = get_stel_id(address_data)
+    if not stel_address_id:
+        log_sync("Address", "Skipped", None, "Customer", customer_name, "Missing STEL address ID", payload=address_data)
+        return None
+
+    try:
+        existing = frappe.db.get_value("Address", {"custom_stel_id": stel_address_id}, "name")
+        address = frappe.get_doc("Address", existing) if existing else frappe.new_doc("Address")
+
+        address.address_title = get_address_title(address_data, customer_name)
+        address.address_type = "Billing"
+        address.address_line1 = get_address_line1(address_data)
+        address.address_line2 = get_first(address_data, "extra-data", "extraData") or None
+        address.city = get_first(address_data, "city-town", "city", "localidad") or None
+        address.state = get_first(address_data, "province", "state", "provincia") or None
+        address.pincode = get_first(address_data, "postal-code", "postalCode", "zip", "zipcode") or None
+        address.country = get_country(address_data)
+        address.is_primary_address = 1
+        address.is_shipping_address = 0
+        address.custom_stel_id = stel_address_id
+        address.custom_stel_last_sync = now()
+        address.custom_stel_sync_status = "Synced"
+
+        ensure_dynamic_link(address, "Customer", customer_name)
+
+        if existing:
+            address.save(ignore_permissions=True)
+            action = "updated"
+        else:
+            address.insert(ignore_permissions=True)
+            action = "created"
+
+        log_sync("Address", "Success", stel_address_id, "Address", address.name, f"Billing address {action}", payload=address_data)
+        return action
+    except Exception:
+        mark_error("Address", stel_address_id)
+        log_sync(
+            "Address",
+            "Error",
+            stel_address_id,
+            "Customer",
+            customer_name,
+            "Billing address sync failed",
+            traceback.format_exc(),
+            address_data,
+        )
+        return "error"
+
+
+def get_address_title(address_data, customer_name):
+    return get_first(address_data, "name", "address-type-name", "address-type") or customer_name
+
+
+def get_address_line1(address_data):
+    return (
+        get_first(address_data, "formatted-address", "address-data", "address", "addressLine1", "direccion")
+        or f"STEL Address {get_stel_id(address_data)}"
+    )
+
+
+def get_country(address_data):
+    country_code = get_first(address_data, "country-code", "countryCode")
+    if country_code:
+        country = get_country_by_code(country_code)
+        if country:
+            return country
+
+    return get_first(address_data, "country", "pais") or "Spain"
+
+
+def get_country_by_code(country_code):
+    meta = frappe.get_meta("Country")
+    for fieldname in ("code", "country_code"):
+        if meta.has_field(fieldname):
+            country = frappe.db.get_value("Country", {fieldname: country_code}, "name")
+            if country:
+                return country
+
+    if country_code == "ES" and frappe.db.exists("Country", "Spain"):
+        return "Spain"
+
+    return None
+
+
+def ensure_dynamic_link(doc, link_doctype, link_name):
+    for link in doc.get("links", []):
+        if link.link_doctype == link_doctype and link.link_name == link_name:
+            return
+
+    doc.append("links", {"link_doctype": link_doctype, "link_name": link_name})
 
 
 def get_first(item, *keys):

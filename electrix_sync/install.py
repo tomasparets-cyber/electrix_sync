@@ -66,16 +66,44 @@ def create_custom_fields():
                 "no_copy": 1,
             },
         ],
+        "Address": [
+            {
+                "fieldname": "custom_stel_id",
+                "label": "STEL ID",
+                "fieldtype": "Data",
+                "insert_after": "address_title",
+                "unique": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_last_sync",
+                "label": "STEL Last Sync",
+                "fieldtype": "Datetime",
+                "insert_after": "custom_stel_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_sync_status",
+                "label": "STEL Sync Status",
+                "fieldtype": "Select",
+                "options": SYNC_STATUS_OPTIONS,
+                "insert_after": "custom_stel_last_sync",
+                "default": "Pending",
+                "no_copy": 1,
+            },
+        ],
     }
 
     frappe_create_custom_fields(custom_fields, update=True)
 
     frappe.clear_cache(doctype="Customer")
     frappe.clear_cache(doctype="Lead")
+    frappe.clear_cache(doctype="Address")
 
 
 def create_unique_indexes():
-    for doctype in ("Customer", "Lead"):
+    for doctype in ("Customer", "Lead", "Address"):
         table = f"tab{doctype}"
         index_name = f"unique_{doctype.lower()}_stel_id"
         if not frappe.db.has_index(table, index_name):

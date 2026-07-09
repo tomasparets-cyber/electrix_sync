@@ -5,12 +5,15 @@ Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer`
 ## Scope
 
 - Creates STEL custom fields on `Customer` and `Lead`.
+- Creates STEL custom fields on `Address`.
 - Avoids duplicates by `custom_stel_id`.
 - Reads STEL Order API data from configurable endpoints.
 - Creates or updates ERPNext `Customer` records.
 - Creates or updates ERPNext `Lead` records.
+- Creates or updates the STEL `main-address` as an ERPNext billing `Address` linked to the `Customer`.
 - Stores sync errors and payloads in `Electrix Sync Log`.
-- Does not sync addresses, contacts, quotations, invoices, or accounting documents.
+- Does not sync secondary STEL addresses, contacts, quotations, invoices, or accounting documents.
+- Secondary STEL addresses should be mapped later to the custom ERPNext `Lugares` DocType, without linking them to `Customer`.
 
 ## STEL API Defaults
 
@@ -31,7 +34,7 @@ The OpenAPI document says list requests are limited to 100 records by default an
 
 ## ERPNext Fields
 
-The installer creates these custom fields on both `Customer` and `Lead`:
+The installer creates these custom fields on `Customer`, `Lead`, and `Address`:
 
 - `custom_stel_id`: Data, unique
 - `custom_stel_last_sync`: Datetime
@@ -80,4 +83,3 @@ git push -u origin main
 ```
 
 For Frappe Cloud, make sure the repository is accessible to the Frappe Cloud GitHub app or use the repository URL method supported by your Frappe Cloud account.
-

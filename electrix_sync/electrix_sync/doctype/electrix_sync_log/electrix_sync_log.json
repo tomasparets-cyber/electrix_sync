@@ -21,7 +21,7 @@
       "fieldtype": "Select",
       "in_list_view": 1,
       "label": "Sync Type",
-      "options": "Customer\nLead"
+      "options": "Customer\nLead\nAddress"
     },
     {
       "fieldname": "status",
@@ -86,4 +86,3 @@
   "sort_order": "DESC",
   "states": []
 }
-
