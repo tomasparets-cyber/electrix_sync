@@ -268,22 +268,26 @@ def sync_employee(item, settings):
 
         first_name, last_name = get_employee_names(item, stel_id)
         doc.first_name = first_name
-        if hasattr(doc, "last_name"):
+        if has_field(doc, "last_name"):
             doc.last_name = last_name
         doc.employee_name = " ".join(part for part in (first_name, last_name) if part).strip()
         doc.company = get_default_company(doc)
         doc.status = "Active"
-        if not doc.get("date_of_joining") and hasattr(doc, "date_of_joining"):
-            doc.date_of_joining = today()
-        if user_name and hasattr(doc, "user_id"):
+        if has_field(doc, "gender") and not doc.get("gender"):
+            doc.gender = get_employee_gender(item, settings)
+        if has_field(doc, "date_of_birth") and not doc.get("date_of_birth"):
+            doc.date_of_birth = get_employee_date_of_birth(item, settings)
+        if has_field(doc, "date_of_joining") and not doc.get("date_of_joining"):
+            doc.date_of_joining = get_employee_date_of_joining(item, settings)
+        if user_name and has_field(doc, "user_id"):
             doc.user_id = user_name
-        if email and hasattr(doc, "personal_email"):
+        if email and has_field(doc, "personal_email"):
             doc.personal_email = email
         phone = get_phone(item, "phone", "phone2", "mobile", "mobileNo", "mobile_no", "telephone", "telefono")
-        if phone and hasattr(doc, "cell_number"):
+        if phone and has_field(doc, "cell_number"):
             doc.cell_number = phone
         position = get_first(item, "position", "puesto")
-        if position and hasattr(doc, "designation"):
+        if position and has_field(doc, "designation"):
             doc.designation = get_or_create_designation(position)
 
         doc.custom_stel_id = stel_id
@@ -396,6 +400,71 @@ def get_default_company(doc):
     ) or frappe.db.get_value("Company", {}, "name")
 
 
+def get_employee_gender(item, settings):
+    raw_gender = get_first(item, "gender", "sex", "genero", "sexo")
+    gender = normalize_gender(raw_gender)
+    if gender:
+        return gender
+
+    default_gender = getattr(settings, "default_employee_gender", None)
+    if default_gender and frappe.db.exists("Gender", default_gender):
+        return default_gender
+
+    for candidate in ("Other", "Prefer Not to Say", "Gender Diverse", "Male", "Female"):
+        if frappe.db.exists("Gender", candidate):
+            return candidate
+
+    return frappe.db.get_value("Gender", {}, "name") or get_or_create_gender("Other")
+
+
+def normalize_gender(value):
+    if not value:
+        return None
+
+    gender = str(value).strip()
+    if frappe.db.exists("Gender", gender):
+        return gender
+
+    mapped = {
+        "m": "Male",
+        "male": "Male",
+        "hombre": "Male",
+        "masculino": "Male",
+        "f": "Female",
+        "female": "Female",
+        "mujer": "Female",
+        "femenino": "Female",
+        "other": "Other",
+        "otro": "Other",
+        "otra": "Other",
+    }.get(gender.lower())
+
+    return mapped if mapped and frappe.db.exists("Gender", mapped) else None
+
+
+def get_employee_date_of_birth(item, settings):
+    return normalize_date(
+        get_first(item, "date-of-birth", "dateOfBirth", "birthdate", "birthday", "fecha_nacimiento")
+        or getattr(settings, "default_employee_date_of_birth", None)
+        or "1900-01-01"
+    )
+
+
+def get_employee_date_of_joining(item, settings):
+    return normalize_date(
+        get_first(item, "date-of-joining", "dateOfJoining", "joiningDate", "startDate", "creation-date")
+        or getattr(settings, "default_employee_date_of_joining", None)
+        or today()
+    )
+
+
+def normalize_date(value):
+    if not value:
+        return None
+
+    return str(value).strip()[:10]
+
+
 def get_valid_email(value):
     if not value:
         return None
@@ -420,6 +489,19 @@ def get_or_create_designation(position):
         return position
     except Exception:
         return None
+
+
+def get_or_create_gender(gender):
+    try:
+        doc = frappe.get_doc({"doctype": "Gender", "gender": gender})
+        doc.insert(ignore_permissions=True)
+        return doc.name
+    except Exception:
+        return None
+
+
+def has_field(doc, fieldname):
+    return frappe.get_meta(doc.doctype).has_field(fieldname)
 
 
 def get_stel_id(item):

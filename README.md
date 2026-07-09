@@ -35,6 +35,7 @@ Use these values in `Electrix Sync Settings`:
 - Addresses Endpoint: `/app/addresses`
 - Employees Endpoint: `/app/employees`
 - Page Limit: `500`
+- Default Employee Date of Birth: `1900-01-01` unless you prefer another placeholder.
 
 The OpenAPI document says list requests are limited to 100 records by default and can be increased to 500 using `limit`. This app paginates with `start` and `limit`.
 

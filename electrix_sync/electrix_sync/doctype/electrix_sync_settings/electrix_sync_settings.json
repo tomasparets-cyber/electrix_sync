@@ -21,6 +21,10 @@
     "default_customer_group",
     "default_territory",
     "default_lead_source",
+    "employee_defaults_section",
+    "default_employee_gender",
+    "default_employee_date_of_birth",
+    "default_employee_date_of_joining",
     "scheduler_section",
     "sync_customers",
     "sync_leads",
@@ -114,6 +118,28 @@
       "fieldtype": "Link",
       "label": "Default Lead Source",
       "options": "Lead Source"
+    },
+    {
+      "fieldname": "employee_defaults_section",
+      "fieldtype": "Section Break",
+      "label": "Employee Defaults"
+    },
+    {
+      "fieldname": "default_employee_gender",
+      "fieldtype": "Link",
+      "label": "Default Employee Gender",
+      "options": "Gender"
+    },
+    {
+      "default": "1900-01-01",
+      "fieldname": "default_employee_date_of_birth",
+      "fieldtype": "Date",
+      "label": "Default Employee Date of Birth"
+    },
+    {
+      "fieldname": "default_employee_date_of_joining",
+      "fieldtype": "Date",
+      "label": "Default Employee Date of Joining"
     },
     {
       "fieldname": "scheduler_section",
