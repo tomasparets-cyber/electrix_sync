@@ -1,0 +1,83 @@
+# Electrix Sync
+
+Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer` and STEL Order potential clients into ERPNext `Lead`.
+
+## Scope
+
+- Creates STEL custom fields on `Customer` and `Lead`.
+- Avoids duplicates by `custom_stel_id`.
+- Reads STEL Order API data from configurable endpoints.
+- Creates or updates ERPNext `Customer` records.
+- Creates or updates ERPNext `Lead` records.
+- Stores sync errors and payloads in `Electrix Sync Log`.
+- Does not sync addresses, contacts, quotations, invoices, or accounting documents.
+
+## STEL API Defaults
+
+The defaults are based on STEL Order's OpenAPI document at:
+
+`https://app.stelorder.com/app/api/openapi.json`
+
+Use these values in `Electrix Sync Settings`:
+
+- STEL Base URL: `https://app.stelorder.com`
+- Auth Header Name: `APIKEY`
+- Auth Header Prefix: leave empty
+- Customers Endpoint: `/app/clients`
+- Leads Endpoint: `/app/potentialClients`
+- Page Limit: `500`
+
+The OpenAPI document says list requests are limited to 100 records by default and can be increased to 500 using `limit`. This app paginates with `start` and `limit`.
+
+## ERPNext Fields
+
+The installer creates these custom fields on both `Customer` and `Lead`:
+
+- `custom_stel_id`: Data, unique
+- `custom_stel_last_sync`: Datetime
+- `custom_stel_sync_status`: Select (`Pending`, `Synced`, `Error`, `Skipped`)
+
+## Local Bench Install
+
+```bash
+bench get-app /path/to/electrix_sync
+bench --site your-site install-app electrix_sync
+bench --site your-site migrate
+```
+
+Then open **Electrix Sync Settings**, enter the STEL API token, confirm the defaults, choose ERPNext defaults, and enable sync.
+
+## Manual Sync
+
+```bash
+bench --site your-site execute electrix_sync.api.sync.sync_customers
+bench --site your-site execute electrix_sync.api.sync.sync_leads
+bench --site your-site execute electrix_sync.api.sync.sync_all
+```
+
+## Frappe Cloud Install
+
+1. Push this app to a Git repository.
+2. In Frappe Cloud, open your bench.
+3. Go to **Apps** and add a custom app from the Git repository URL.
+4. Select the branch to install, normally `main`.
+5. Deploy the bench.
+6. Open the site, go to **Apps**, and install `electrix_sync` on the ERPNext site.
+7. After install, open **Electrix Sync Settings** and configure the STEL token and ERPNext defaults.
+8. Keep `Enabled` off until the first manual sync test succeeds.
+
+## Git Repository Setup
+
+From the app folder:
+
+```bash
+git init
+git add .
+git commit -m "Initial Electrix Sync app"
+git branch -M main
+git remote add origin git@github.com:YOUR_ORG/electrix_sync.git
+git push -u origin main
+```
+
+For Frappe Cloud, make sure the repository is accessible to the Frappe Cloud GitHub app or use the repository URL method supported by your Frappe Cloud account.
+

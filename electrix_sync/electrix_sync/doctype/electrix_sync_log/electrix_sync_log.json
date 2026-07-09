@@ -1,0 +1,89 @@
+{
+  "actions": [],
+  "allow_rename": 0,
+  "creation": "2026-07-09 00:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "sync_type",
+    "status",
+    "stel_id",
+    "erpnext_doctype",
+    "erpnext_document",
+    "message",
+    "error",
+    "payload"
+  ],
+  "fields": [
+    {
+      "fieldname": "sync_type",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Sync Type",
+      "options": "Customer\nLead"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Status",
+      "options": "Success\nError\nSkipped"
+    },
+    {
+      "fieldname": "stel_id",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "STEL ID"
+    },
+    {
+      "fieldname": "erpnext_doctype",
+      "fieldtype": "Data",
+      "label": "ERPNext DocType"
+    },
+    {
+      "fieldname": "erpnext_document",
+      "fieldtype": "Dynamic Link",
+      "label": "ERPNext Document",
+      "options": "erpnext_doctype"
+    },
+    {
+      "fieldname": "message",
+      "fieldtype": "Small Text",
+      "label": "Message"
+    },
+    {
+      "fieldname": "error",
+      "fieldtype": "Code",
+      "label": "Error"
+    },
+    {
+      "fieldname": "payload",
+      "fieldtype": "Code",
+      "label": "Payload",
+      "options": "JSON"
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "links": [],
+  "modified": "2026-07-09 00:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Electrix Sync",
+  "name": "Electrix Sync Log",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "role": "System Manager",
+      "share": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
+}
+
