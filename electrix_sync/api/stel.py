@@ -3,11 +3,13 @@ from urllib.parse import urljoin
 import frappe
 import requests
 
+STEL_BASE_URL = "https://app.stelorder.com"
+
 
 class StelClient:
     def __init__(self, settings=None):
         self.settings = settings or frappe.get_single("Electrix Sync Settings")
-        self.base_url = (self.settings.stel_base_url or "").rstrip("/") + "/"
+        self.base_url = normalize_base_url(self.settings.stel_base_url)
         self.token = self.settings.get_password("api_token") if self.settings.api_token else None
         self.page_limit = min(max(int(getattr(self.settings, "page_limit", None) or 500), 1), 500)
 
@@ -83,3 +85,12 @@ class StelClient:
             return meta.get("next")
 
         return data.get("next") if isinstance(data.get("next"), str) else None
+
+
+def normalize_base_url(base_url):
+    base_url = (base_url or "").strip()
+
+    if base_url.startswith(STEL_BASE_URL):
+        base_url = STEL_BASE_URL
+
+    return base_url.rstrip("/") + "/"
