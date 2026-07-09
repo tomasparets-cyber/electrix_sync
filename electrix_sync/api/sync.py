@@ -94,8 +94,8 @@ def sync_customer(item, settings):
 
         doc.customer_name = customer_name
         doc.customer_type = get_customer_type(item)
-        doc.customer_group = settings.default_customer_group or doc.get("customer_group") or "All Customer Groups"
-        doc.territory = settings.default_territory or doc.get("territory") or "All Territories"
+        doc.customer_group = get_customer_group(settings, doc)
+        doc.territory = get_territory(settings, doc)
         doc.custom_stel_id = stel_id
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
@@ -198,6 +198,28 @@ def get_customer_type(item):
         return "Individual"
 
     return "Company"
+
+
+def get_customer_group(settings, doc):
+    return (
+        get_non_group_customer_group(settings.default_customer_group)
+        or get_non_group_customer_group(doc.get("customer_group"))
+        or get_non_group_customer_group("Individual")
+        or get_non_group_customer_group("Commercial")
+        or frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+    )
+
+
+def get_non_group_customer_group(customer_group):
+    if not customer_group:
+        return None
+
+    is_group = frappe.db.get_value("Customer Group", customer_group, "is_group")
+    return customer_group if is_group == 0 else None
+
+
+def get_territory(settings, doc):
+    return settings.default_territory or doc.get("territory") or "All Territories"
 
 
 def get_first(item, *keys):
