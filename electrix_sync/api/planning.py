@@ -6,10 +6,12 @@ from frappe import _
 from frappe.utils import add_days, get_datetime, get_system_timezone, nowdate
 
 from electrix_sync.api.stel import StelClient
+from electrix_sync.api.sync import get_stel_id, match_employee_calendar
 
 
 @frappe.whitelist()
 def get_board(start_date=None, days=7):
+    ensure_calendar_assignments()
     start_date = get_datetime(start_date or nowdate()).date()
     days = max(1, min(int(days or 7), 14))
     end_date = add_days(start_date, days)
@@ -47,14 +49,80 @@ def get_board(start_date=None, days=7):
         order_by="modified desc",
         limit_page_length=500,
     )
-    planned_names = {row.name for row in planned}
-
     return {
         "start_date": str(start_date),
         "days": [str(add_days(start_date, offset)) for offset in range(days)],
         "employees": employees,
         "events": planned,
-        "unplanned": [row for row in unplanned if row.name not in planned_names],
+        "unplanned": unplanned,
+    }
+
+
+def ensure_calendar_assignments():
+    active_count = frappe.db.count("Employee", {"status": "Active"})
+    mapped_count = frappe.db.count(
+        "Employee", {"status": "Active", "custom_stel_calendar_id": ["is", "set"]}
+    )
+    if active_count and mapped_count == 0:
+        repair_calendar_assignments()
+
+
+@frappe.whitelist()
+def repair_calendar_assignments():
+    client = StelClient()
+    calendars = client.get_calendars()
+    employees = frappe.get_all("Employee", filters={"status": "Active"}, fields=["name", "employee_name"])
+    employee_by_calendar = {}
+    mapped_employees = 0
+
+    for employee in employees:
+        calendar_id = match_employee_calendar({"name": employee.employee_name}, calendars)
+        if not calendar_id:
+            continue
+        frappe.db.set_value(
+            "Employee", employee.name, "custom_stel_calendar_id", str(calendar_id), update_modified=False
+        )
+        employee_by_calendar[str(calendar_id)] = employee.name
+        mapped_employees += 1
+
+    stel_events = {str(get_stel_id(row)): row for row in client.get_events() if get_stel_id(row)}
+    erp_events = frappe.get_all(
+        "Event",
+        filters={"custom_stel_id": ["is", "set"]},
+        fields=["name", "custom_stel_id", "starts_on", "ends_on", "status"],
+        limit_page_length=10000,
+    )
+    mapped_events = 0
+    for event in erp_events:
+        source = stel_events.get(str(event.custom_stel_id))
+        if not source:
+            continue
+        calendar_id = source.get("calendarId") or source.get("calendar-id")
+        employee = employee_by_calendar.get(str(calendar_id)) if calendar_id else None
+        starts_on = source.get("startDate") or source.get("start-date") or event.starts_on
+        ends_on = source.get("endDate") or source.get("end-date") or event.ends_on
+        state = str(source.get("state") or source.get("event-state") or "").upper()
+        planning_status = "Completed" if state == "COMPLETED" else (
+            "Planned" if employee and starts_on and ends_on else "Unplanned"
+        )
+        frappe.db.set_value(
+            "Event",
+            event.name,
+            {
+                "custom_stel_calendar_id": str(calendar_id) if calendar_id else None,
+                "custom_assigned_employee": employee,
+                "custom_planning_status": planning_status,
+            },
+            update_modified=False,
+        )
+        if planning_status != "Unplanned":
+            mapped_events += 1
+
+    frappe.db.commit()
+    return {
+        "employees": mapped_employees,
+        "events": mapped_events,
+        "calendars": len(calendars),
     }
 
 

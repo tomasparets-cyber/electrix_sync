@@ -16,6 +16,7 @@ class ElectrixPlanning {
 	}
 
 	buildActions() {
+		this.page.add_inner_button(__("Sincronizar calendarios"), () => this.repairCalendars());
 		this.page.add_inner_button(__("Anterior"), () => this.shiftWeek(-7));
 		this.page.add_inner_button(__("Hoy"), () => {
 			this.startDate = frappe.datetime.get_today();
@@ -23,6 +24,20 @@ class ElectrixPlanning {
 		});
 		this.page.add_inner_button(__("Siguiente"), () => this.shiftWeek(7));
 		this.page.set_primary_action(__("Actualizar"), () => this.load(), "refresh");
+	}
+
+	async repairCalendars() {
+		const response = await frappe.call({
+			method: "electrix_sync.api.planning.repair_calendar_assignments",
+			freeze: true,
+			freeze_message: __("Relacionando calendarios, empleados y eventos…"),
+		});
+		const result = response.message || {};
+		frappe.show_alert({
+			message: __(`Calendarios sincronizados: ${result.employees || 0} empleados, ${result.events || 0} eventos`),
+			indicator: "green",
+		}, 7);
+		await this.load();
 	}
 
 	shiftWeek(days) {
