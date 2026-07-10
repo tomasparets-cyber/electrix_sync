@@ -9,11 +9,7 @@ app_license = "MIT"
 # the underlying audit history intact.
 app_include_css = "/assets/electrix_sync/css/desk.css"
 
-after_install = "electrix_sync.install.after_install"
-after_migrate = "electrix_sync.install.after_migrate"
-
-scheduler_events = {
-    "hourly": [
-        "electrix_sync.api.sync.sync_all",
-    ]
-}
+# Frappe v16 phase 1 deliberately only imports an immutable STEL snapshot into
+# staging.  The legacy v15 installer and scheduler create ERPNext documents and
+# depend on DocTypes that are no longer present in v16 (for example Lead Source),
+# so they must not run on this branch.

@@ -6,43 +6,14 @@
   "editable_grid": 1,
   "engine": "InnoDB",
   "field_order": [
-    "enabled",
     "api_section",
     "stel_base_url",
     "api_token",
     "auth_header_name",
     "auth_header_prefix",
-    "customers_endpoint",
-    "leads_endpoint",
-    "addresses_endpoint",
-    "employees_endpoint",
-    "incidents_endpoint",
-    "events_endpoint",
-    "page_limit",
-    "mapping_section",
-    "default_customer_group",
-    "default_territory",
-    "default_lead_source",
-    "employee_defaults_section",
-    "default_employee_gender",
-    "default_employee_date_of_birth",
-    "default_employee_date_of_joining",
-    "scheduler_section",
-    "sync_customers",
-    "sync_leads",
-    "sync_places",
-    "sync_employees",
-    "sync_incidents",
-    "sync_events",
-    "create_users"
+    "page_limit"
   ],
   "fields": [
-    {
-      "default": "0",
-      "fieldname": "enabled",
-      "fieldtype": "Check",
-      "label": "Enabled"
-    },
     {
       "fieldname": "api_section",
       "fieldtype": "Section Break",
@@ -71,138 +42,10 @@
       "label": "Auth Header Prefix"
     },
     {
-      "default": "/app/clients",
-      "fieldname": "customers_endpoint",
-      "fieldtype": "Data",
-      "label": "Customers Endpoint"
-    },
-    {
-      "default": "/app/potentialClients",
-      "fieldname": "leads_endpoint",
-      "fieldtype": "Data",
-      "label": "Leads Endpoint"
-    },
-    {
-      "default": "/app/addresses",
-      "fieldname": "addresses_endpoint",
-      "fieldtype": "Data",
-      "label": "Addresses Endpoint"
-    },
-    {
-      "default": "/app/employees",
-      "fieldname": "employees_endpoint",
-      "fieldtype": "Data",
-      "label": "Employees Endpoint"
-    },
-    {
-      "default": "/app/incidents",
-      "fieldname": "incidents_endpoint",
-      "fieldtype": "Data",
-      "label": "Incidents Endpoint"
-    },
-    {
-      "default": "/app/events",
-      "fieldname": "events_endpoint",
-      "fieldtype": "Data",
-      "label": "Events Endpoint"
-    },
-    {
       "default": "500",
       "fieldname": "page_limit",
       "fieldtype": "Int",
-      "label": "Page Limit"
-    },
-    {
-      "fieldname": "mapping_section",
-      "fieldtype": "Section Break",
-      "label": "ERPNext Defaults"
-    },
-    {
-      "fieldname": "default_customer_group",
-      "fieldtype": "Link",
-      "label": "Default Customer Group",
-      "options": "Customer Group"
-    },
-    {
-      "fieldname": "default_territory",
-      "fieldtype": "Link",
-      "label": "Default Territory",
-      "options": "Territory"
-    },
-    {
-      "fieldname": "default_lead_source",
-      "fieldtype": "Link",
-      "label": "Default Lead Source",
-      "options": "Lead Source"
-    },
-    {
-      "fieldname": "employee_defaults_section",
-      "fieldtype": "Section Break",
-      "label": "Employee Defaults"
-    },
-    {
-      "fieldname": "default_employee_gender",
-      "fieldtype": "Link",
-      "label": "Default Employee Gender",
-      "options": "Gender"
-    },
-    {
-      "default": "1900-01-01",
-      "fieldname": "default_employee_date_of_birth",
-      "fieldtype": "Date",
-      "label": "Default Employee Date of Birth"
-    },
-    {
-      "fieldname": "default_employee_date_of_joining",
-      "fieldtype": "Date",
-      "label": "Default Employee Date of Joining"
-    },
-    {
-      "fieldname": "scheduler_section",
-      "fieldtype": "Section Break",
-      "label": "Scheduled Sync"
-    },
-    {
-      "default": "1",
-      "fieldname": "sync_customers",
-      "fieldtype": "Check",
-      "label": "Sync Customers"
-    },
-    {
-      "default": "1",
-      "fieldname": "sync_leads",
-      "fieldtype": "Check",
-      "label": "Sync Leads"
-    },
-    {
-      "default": "1",
-      "fieldname": "sync_places",
-      "fieldtype": "Check",
-      "label": "Sync Places"
-    },
-    {
-      "default": "1",
-      "fieldname": "sync_employees",
-      "fieldtype": "Check",
-      "label": "Sync Employees"
-    },
-    {
-      "default": "1",
-      "fieldname": "sync_incidents",
-      "fieldtype": "Check",
-      "label": "Sync Incidents"
-    },
-    {
-      "default": "1",
-      "fieldname": "sync_events",
-      "fieldtype": "Check",
-      "label": "Sync Events"
-    },
-    {
-      "default": "1",
-      "fieldname": "create_users",
-      "fieldtype": "Check",
-      "label": "Create Users for Employees"
+      "label": "Registros por página"
     }
   ],
   "index_web_pages_for_search": 1,
