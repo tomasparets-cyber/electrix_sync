@@ -1,5 +1,21 @@
 # Electrix Sync
 
+> The `version-16` branch targets Frappe/ERPNext 16 and adds a read-only bulk
+> snapshot importer for the complete STEL Order API.
+
+## ERPNext 16: first full STEL snapshot
+
+The first phase reads all 56 supported STEL collections into two staging
+DocTypes without creating or submitting ERPNext accounting documents:
+
+- `STEL Raw Record`: one idempotent JSON snapshot per STEL resource and ID.
+- `STEL Bulk Sync Run`: progress, counters, errors, and resumable resource index.
+
+Install this branch in Frappe Cloud, configure the API token in **Electrix Sync
+Settings**, and use **STEL Bulk Sync → Leer todos los registros de STEL**. Each
+resource runs as a separate long background job, so a large initial load does
+not occupy a web request and completed resources remain committed.
+
 Custom Frappe/ERPNext v15 app to sync STEL Order clients into ERPNext `Customer`, potential clients into ERPNext `Lead`, employees into ERPNext `Employee`/`User`, incidents into `Task`, and events into `Event`.
 
 ## Scope

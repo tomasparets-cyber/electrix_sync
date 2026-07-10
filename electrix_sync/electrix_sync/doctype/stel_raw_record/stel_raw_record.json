@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "autoname": "field:record_key",
+ "creation": "2026-07-11 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["identity_section", "record_key", "resource_type", "endpoint", "remote_id", "is_deleted", "timing_section", "source_modified", "fetched_at", "sync_run", "payload_section", "payload_hash", "payload"],
+ "fields": [
+  {"fieldname": "identity_section", "fieldtype": "Section Break", "label": "STEL Identity"},
+  {"fieldname": "record_key", "fieldtype": "Data", "label": "Record Key", "read_only": 1, "reqd": 1, "unique": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "resource_type", "fieldtype": "Data", "label": "Resource Type", "read_only": 1, "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "endpoint", "fieldtype": "Data", "label": "Endpoint", "read_only": 1},
+  {"fieldname": "remote_id", "fieldtype": "Data", "label": "Remote ID", "read_only": 1, "in_list_view": 1},
+  {"default": "0", "fieldname": "is_deleted", "fieldtype": "Check", "label": "Deleted in STEL", "read_only": 1},
+  {"fieldname": "timing_section", "fieldtype": "Section Break", "label": "Timing"},
+  {"fieldname": "source_modified", "fieldtype": "Datetime", "label": "Source Modified", "read_only": 1},
+  {"fieldname": "fetched_at", "fieldtype": "Datetime", "label": "Fetched At", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sync_run", "fieldtype": "Link", "label": "Sync Run", "options": "STEL Bulk Sync Run", "read_only": 1},
+  {"fieldname": "payload_section", "fieldtype": "Section Break", "label": "Raw Payload"},
+  {"fieldname": "payload_hash", "fieldtype": "Data", "label": "Payload Hash", "read_only": 1},
+  {"fieldname": "payload", "fieldtype": "Code", "label": "JSON Payload", "options": "JSON", "read_only": 1, "reqd": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-07-11 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Electrix Sync",
+ "name": "STEL Raw Record",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "report": 1, "export": 1, "role": "System Manager"}
+ ],
+ "sort_field": "fetched_at",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

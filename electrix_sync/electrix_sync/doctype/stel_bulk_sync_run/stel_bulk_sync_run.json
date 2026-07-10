@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "autoname": "format:STEL-BULK-{YYYY}-{#####}",
+ "creation": "2026-07-11 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["status_section", "status", "started_at", "finished_at", "job_id", "progress_section", "resource_index", "resources_total", "resources_completed", "current_resource", "records_read", "records_created", "records_updated", "records_unchanged", "error_count", "log_section", "error_log"],
+ "fields": [
+  {"fieldname": "status_section", "fieldtype": "Section Break", "label": "Status"},
+  {"default": "Queued", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Queued\nRunning\nCompleted\nCompleted with Errors\nFailed", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "started_at", "fieldtype": "Datetime", "label": "Started At", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "finished_at", "fieldtype": "Datetime", "label": "Finished At", "read_only": 1},
+  {"fieldname": "job_id", "fieldtype": "Data", "label": "Job ID", "read_only": 1},
+  {"fieldname": "progress_section", "fieldtype": "Section Break", "label": "Progress"},
+  {"default": "0", "fieldname": "resource_index", "fieldtype": "Int", "label": "Resource Index", "read_only": 1},
+  {"default": "0", "fieldname": "resources_total", "fieldtype": "Int", "label": "Resources Total", "read_only": 1},
+  {"default": "0", "fieldname": "resources_completed", "fieldtype": "Int", "label": "Resources Completed", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "current_resource", "fieldtype": "Data", "label": "Current Resource", "read_only": 1, "in_list_view": 1},
+  {"default": "0", "fieldname": "records_read", "fieldtype": "Int", "label": "Records Read", "read_only": 1, "in_list_view": 1},
+  {"default": "0", "fieldname": "records_created", "fieldtype": "Int", "label": "Records Created", "read_only": 1},
+  {"default": "0", "fieldname": "records_updated", "fieldtype": "Int", "label": "Records Updated", "read_only": 1},
+  {"default": "0", "fieldname": "records_unchanged", "fieldtype": "Int", "label": "Records Unchanged", "read_only": 1},
+  {"default": "0", "fieldname": "error_count", "fieldtype": "Int", "label": "Errors", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "log_section", "fieldtype": "Section Break", "label": "Errors"},
+  {"fieldname": "error_log", "fieldtype": "Long Text", "label": "Error Log", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [{"link_doctype": "STEL Raw Record", "link_fieldname": "sync_run"}],
+ "modified": "2026-07-11 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Electrix Sync",
+ "name": "STEL Bulk Sync Run",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "read": 1, "report": 1, "export": 1, "role": "System Manager"}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 0
+}
