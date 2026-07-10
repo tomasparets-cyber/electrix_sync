@@ -6,6 +6,10 @@ import requests
 STEL_BASE_URL = "https://app.stelorder.com"
 
 
+class StelPermissionError(Exception):
+    pass
+
+
 class StelClient:
     def __init__(self, settings=None):
         self.settings = settings or frappe.get_single("Electrix Sync Settings")
@@ -45,6 +49,10 @@ class StelClient:
 
         while url:
             response = requests.get(url, headers=self._headers(), params=params, timeout=30)
+            if response.status_code == 403:
+                raise StelPermissionError(
+                    f"STEL API permission denied for {response.url}. Check API token permissions in STEL Order."
+                )
             response.raise_for_status()
             data = response.json()
 

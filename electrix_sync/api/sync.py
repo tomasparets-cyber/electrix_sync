@@ -6,7 +6,7 @@ import frappe
 from frappe.utils import now, today, validate_email_address, validate_phone_number
 from frappe.utils.data import get_datetime
 
-from electrix_sync.api.stel import StelClient
+from electrix_sync.api.stel import StelClient, StelPermissionError
 
 
 @frappe.whitelist()
@@ -49,6 +49,10 @@ def sync_customers():
 
     try:
         items = StelClient(settings).get_customers()
+    except StelPermissionError as error:
+        log_sync("Customer", "Error", message=str(error))
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
     except Exception:
         log_sync("Customer", "Error", message="Could not fetch STEL customers", error=traceback.format_exc())
         frappe.db.commit()
@@ -75,6 +79,10 @@ def sync_employees():
 
     try:
         items = StelClient(settings).get_employees()
+    except StelPermissionError as error:
+        log_sync("Employee", "Error", message=str(error))
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
     except Exception:
         log_sync("Employee", "Error", message="Could not fetch STEL employees", error=traceback.format_exc())
         frappe.db.commit()
@@ -98,6 +106,10 @@ def sync_leads():
 
     try:
         items = StelClient(settings).get_leads()
+    except StelPermissionError as error:
+        log_sync("Lead", "Error", message=str(error))
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
     except Exception:
         log_sync("Lead", "Error", message="Could not fetch STEL potential clients", error=traceback.format_exc())
         frappe.db.commit()
@@ -124,6 +136,10 @@ def sync_places():
 
     try:
         items = StelClient(settings).get_addresses()
+    except StelPermissionError as error:
+        log_sync("Lugar", "Error", message=str(error))
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
     except Exception:
         log_sync("Lugar", "Error", message="Could not fetch STEL addresses", error=traceback.format_exc())
         frappe.db.commit()
@@ -147,6 +163,10 @@ def sync_incidents():
 
     try:
         items = StelClient(settings).get_incidents()
+    except StelPermissionError as error:
+        log_sync("Incident", "Error", message=str(error))
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
     except Exception:
         log_sync("Incident", "Error", message="Could not fetch STEL incidents", error=traceback.format_exc())
         frappe.db.commit()
@@ -170,6 +190,10 @@ def sync_events():
 
     try:
         items = StelClient(settings).get_events()
+    except StelPermissionError as error:
+        log_sync("Event", "Error", message=str(error))
+        frappe.db.commit()
+        return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
     except Exception:
         log_sync("Event", "Error", message="Could not fetch STEL events", error=traceback.format_exc())
         frappe.db.commit()
