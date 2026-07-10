@@ -45,6 +45,18 @@ class StelClient:
         endpoint = getattr(self.settings, "events_endpoint", None) or "/app/events"
         return self.get_collection(endpoint)
 
+    def get_calendars(self):
+        return self.get_collection("/app/calendars")
+
+    def create_event(self, payload):
+        return self._write("POST", "/app/events", payload)
+
+    def update_event(self, event_id, payload):
+        return self._write("PUT", f"/app/events/{event_id}", payload)
+
+    def delete_event(self, event_id):
+        return self._write("DELETE", f"/app/events/{event_id}")
+
     def get_collection(self, endpoint):
         if not endpoint:
             return []
@@ -88,6 +100,14 @@ class StelClient:
 
         return headers
 
+    def _write(self, method, endpoint, payload=None):
+        url = urljoin(self.base_url, endpoint.lstrip("/"))
+        response = requests.request(method, url, headers=self._headers(), json=payload, timeout=30)
+        if response.status_code == 403:
+            raise StelPermissionError(f"STEL API permission denied for {response.url}.")
+        response.raise_for_status()
+        return response.json() if response.content else {}
+
     def _extract_items(self, data):
         if isinstance(data, list):
             return data
@@ -95,7 +115,20 @@ class StelClient:
         if not isinstance(data, dict):
             return []
 
-        for key in ("data", "items", "results", "customers", "clients", "leads", "employees", "incidents", "events"):
+        for key in (
+            "data",
+            "items",
+            "results",
+            "customers",
+            "clients",
+            "leads",
+            "employees",
+            "incidents",
+            "events",
+            "calendars",
+            "incidentStates",
+            "incidentTypes",
+        ):
             value = data.get(key)
             if isinstance(value, list):
                 return value

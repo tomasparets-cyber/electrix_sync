@@ -11,6 +11,7 @@ from electrix_sync.api.sync import (
     get_issue_status,
     get_task_priority,
     get_task_status,
+    match_employee_calendar,
 )
 
 
@@ -64,3 +65,14 @@ def test_incident_priority_mappings():
     assert get_task_priority({"priority": "VERYLOW"}) == "Low"
     assert get_task_priority({"priority": "NORMAL"}) == "Medium"
     assert get_task_priority({"priority": "VERYHIGH"}) == "Urgent"
+
+
+def test_employee_calendar_matching_uses_shared_name_tokens():
+    calendars = [
+        {"id": 66176, "name": "Personal"},
+        {"id": 142754, "name": "Matias Cabanillas"},
+        {"id": 116589, "name": "Xavier Jaume"},
+    ]
+    employee = {"id": 37033, "name": "Matias Cabanillas Sheremeta"}
+
+    assert match_employee_calendar(employee, calendars) == "142754"

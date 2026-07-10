@@ -1,6 +1,7 @@
 import json
 import re
 import traceback
+import unicodedata
 
 import frappe
 from frappe.utils import now, today, validate_email_address, validate_phone_number
@@ -78,7 +79,9 @@ def sync_employees():
     stats = {"created": 0, "updated": 0, "error": 0, "skipped": 0}
 
     try:
-        items = StelClient(settings).get_employees()
+        client = StelClient(settings)
+        items = client.get_employees()
+        calendars = client.get_calendars()
     except StelPermissionError as error:
         log_sync("Employee", "Error", message=str(error))
         frappe.db.commit()
@@ -89,7 +92,7 @@ def sync_employees():
         return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
 
     for item in items:
-        status = sync_employee(item, settings)
+        status = sync_employee(item, settings, calendars=calendars)
         stats[status] += 1
 
     frappe.db.commit()
@@ -412,13 +415,27 @@ def sync_event(item):
         doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
         doc.event_type = "Private"
         doc.starts_on = normalize_datetime(get_first(item, "start-date", "startDate", "date"))
-        doc.ends_on = normalize_datetime(get_first(item, "end-date", "endDate", "start-date", "date"))
+        doc.ends_on = normalize_datetime(get_first(item, "end-date", "endDate", "start-date", "startDate", "date"))
         if has_field(doc, "all_day"):
-            doc.all_day = 1 if item.get("all-day") is True else 0
+            doc.all_day = 1 if get_first(item, "all-day", "allDay") is True else 0
         if has_field(doc, "status"):
             doc.status = get_event_status(item)
         doc.description = build_event_description(item)
         doc.custom_stel_id = stel_id
+        calendar_id = get_first(item, "calendar-id", "calendarId")
+        employee = get_employee_by_stel_calendar_id(calendar_id)
+        if has_field(doc, "custom_stel_calendar_id"):
+            doc.custom_stel_calendar_id = calendar_id
+        if has_field(doc, "custom_assigned_employee"):
+            doc.custom_assigned_employee = employee
+        if has_field(doc, "custom_planning_status"):
+            doc.custom_planning_status = "Completed" if get_event_status(item) == "Closed" else (
+                "Planned" if employee else "Unplanned"
+            )
+        if has_field(doc, "custom_estimated_duration"):
+            start_dt = get_datetime(doc.starts_on)
+            end_dt = get_datetime(doc.ends_on)
+            doc.custom_estimated_duration = max((end_dt - start_dt).total_seconds() / 3600, 0.25)
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
 
@@ -429,7 +446,7 @@ def sync_event(item):
             doc.insert(ignore_permissions=True)
             action = "created"
 
-        add_event_participant(doc, get_first(item, "creator-id"))
+        add_event_participant(doc, get_first(item, "creator-id", "creatorId"))
         log_sync("Event", "Success", stel_id, "Event", doc.name, f"Event {action}", payload=item)
         return action
     except Exception:
@@ -438,7 +455,7 @@ def sync_event(item):
         return "error"
 
 
-def sync_employee(item, settings):
+def sync_employee(item, settings, calendars=None):
     stel_id = get_stel_id(item)
     if not stel_id:
         log_sync("Employee", "Skipped", None, message="Missing STEL ID", payload=item)
@@ -479,6 +496,8 @@ def sync_employee(item, settings):
             doc.designation = get_or_create_designation(position)
 
         doc.custom_stel_id = stel_id
+        if has_field(doc, "custom_stel_calendar_id"):
+            doc.custom_stel_calendar_id = match_employee_calendar(item, calendars)
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
 
@@ -580,6 +599,32 @@ def get_employee_names(item, stel_id):
         first_name = str(email).split("@", 1)[0] if email else f"STEL Employee {stel_id}"
 
     return str(first_name).strip(), str(last_name).strip() if last_name else ""
+
+
+def match_employee_calendar(item, calendars):
+    employee_name = normalize_match_text(get_first(item, "name", "full-name", "fullName"))
+    if not employee_name:
+        first_name, last_name = get_employee_names(item, get_stel_id(item) or "")
+        employee_name = normalize_match_text(f"{first_name} {last_name}")
+
+    best = None
+    best_score = 0
+    employee_tokens = set(employee_name.split())
+    for calendar in calendars or []:
+        calendar_name = normalize_match_text(get_first(calendar, "name"))
+        if not calendar_name or calendar_name == "personal":
+            continue
+        calendar_tokens = set(calendar_name.split())
+        score = len(employee_tokens & calendar_tokens)
+        if score > best_score and (calendar_name in employee_name or employee_name in calendar_name or score >= 1):
+            best = get_stel_id(calendar)
+            best_score = score
+    return best
+
+
+def normalize_match_text(value):
+    value = unicodedata.normalize("NFKD", str(value or "").casefold())
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value).split())
 
 
 def sync_issue_from_incident(item, stel_id, state_name=None, type_name=None):
@@ -734,7 +779,7 @@ def get_issue_priority(item):
 
 
 def get_event_status(item):
-    state = (get_first(item, "event-state") or "").strip().upper()
+    state = (get_first(item, "event-state", "eventState", "state") or "").strip().upper()
     if state in {"CANCELLED", "CANCELED"}:
         return "Cancelled"
     if state in {"CLOSED", "DONE", "COMPLETED"}:
@@ -866,6 +911,14 @@ def get_employee_by_stel_id(stel_employee_id):
         return None
 
     return frappe.db.get_value("Employee", {"custom_stel_id": str(stel_employee_id)}, "name")
+
+
+def get_employee_by_stel_calendar_id(stel_calendar_id):
+    if not stel_calendar_id or not frappe.db.exists("DocType", "Employee"):
+        return None
+    if not frappe.get_meta("Employee").has_field("custom_stel_calendar_id"):
+        return None
+    return frappe.db.get_value("Employee", {"custom_stel_calendar_id": str(stel_calendar_id)}, "name")
 
 
 def get_customer_by_stel_id(stel_customer_id):
