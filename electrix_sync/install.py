@@ -10,6 +10,11 @@ def after_install():
     create_unique_indexes()
 
 
+def after_migrate():
+    create_custom_fields()
+    create_unique_indexes()
+
+
 def create_custom_fields():
     custom_fields = {
         "Customer": [
@@ -130,10 +135,18 @@ def create_custom_fields():
                 "no_copy": 1,
             },
             {
+                "fieldname": "custom_stel_reference",
+                "label": "STEL Incident Reference",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 "fieldname": "custom_stel_last_sync",
                 "label": "STEL Last Sync",
                 "fieldtype": "Datetime",
-                "insert_after": "custom_stel_id",
+                "insert_after": "custom_stel_reference",
                 "read_only": 1,
                 "no_copy": 1,
             },
@@ -144,6 +157,107 @@ def create_custom_fields():
                 "options": SYNC_STATUS_OPTIONS,
                 "insert_after": "custom_stel_last_sync",
                 "default": "Pending",
+                "no_copy": 1,
+            },
+        ],
+        "Issue": [
+            {
+                "fieldname": "custom_stel_id",
+                "label": "STEL ID",
+                "fieldtype": "Data",
+                "insert_after": "subject",
+                "unique": 1,
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_reference",
+                "label": "STEL Incident Reference",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_address_id",
+                "label": "STEL Address ID",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_reference",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_assignee_id",
+                "label": "STEL Assignee ID",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_address_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_creator_id",
+                "label": "STEL Creator ID",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_assignee_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_state_id",
+                "label": "STEL State ID",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_creator_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_type_id",
+                "label": "STEL Type ID",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_state_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_external_id",
+                "label": "STEL External ID",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_type_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_phone",
+                "label": "STEL Phone",
+                "fieldtype": "Data",
+                "insert_after": "custom_stel_external_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_duration_minutes",
+                "label": "STEL Duration (minutes)",
+                "fieldtype": "Float",
+                "insert_after": "custom_stel_phone",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_last_sync",
+                "label": "STEL Last Sync",
+                "fieldtype": "Datetime",
+                "insert_after": "custom_stel_duration_minutes",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_stel_sync_status",
+                "label": "STEL Sync Status",
+                "fieldtype": "Select",
+                "options": SYNC_STATUS_OPTIONS,
+                "insert_after": "custom_stel_last_sync",
+                "default": "Pending",
+                "read_only": 1,
                 "no_copy": 1,
             },
         ],
@@ -241,6 +355,7 @@ def create_custom_fields():
     frappe.clear_cache(doctype="Address")
     frappe.clear_cache(doctype="User")
     frappe.clear_cache(doctype="Task")
+    frappe.clear_cache(doctype="Issue")
     frappe.clear_cache(doctype="Event")
     if frappe.db.exists("DocType", "Employee"):
         frappe.clear_cache(doctype="Employee")
@@ -249,7 +364,7 @@ def create_custom_fields():
 
 
 def create_unique_indexes():
-    doctypes = ["Customer", "Lead", "Address", "User", "Task", "Event"]
+    doctypes = ["Customer", "Lead", "Address", "User", "Task", "Issue", "Event"]
     if frappe.db.exists("DocType", "Employee"):
         doctypes.append("Employee")
     if frappe.db.exists("DocType", "Lugar"):

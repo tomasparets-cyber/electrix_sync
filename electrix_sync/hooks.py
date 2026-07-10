@@ -10,6 +10,7 @@ app_license = "MIT"
 app_include_css = "/assets/electrix_sync/css/desk.css"
 
 after_install = "electrix_sync.install.after_install"
+after_migrate = "electrix_sync.install.after_migrate"
 
 scheduler_events = {
     "hourly": [

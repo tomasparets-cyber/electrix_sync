@@ -162,7 +162,10 @@ def sync_incidents():
     stats = {"created": 0, "updated": 0, "error": 0, "skipped": 0}
 
     try:
-        items = StelClient(settings).get_incidents()
+        client = StelClient(settings)
+        items = client.get_incidents()
+        state_names = get_catalog_names(client.get_incident_states())
+        type_names = get_catalog_names(client.get_incident_types())
     except StelPermissionError as error:
         log_sync("Incident", "Error", message=str(error))
         frappe.db.commit()
@@ -173,7 +176,7 @@ def sync_incidents():
         return {"created": 0, "updated": 0, "error": 1, "skipped": 0}
 
     for item in items:
-        status = sync_incident(item)
+        status = sync_incident(item, state_names=state_names, type_names=type_names)
         stats[status] += 1
 
     frappe.db.commit()
@@ -327,7 +330,7 @@ def sync_lead(item, settings):
         return "error"
 
 
-def sync_incident(item):
+def sync_incident(item, state_names=None, type_names=None):
     stel_id = get_stel_id(item)
     if not stel_id:
         log_sync("Incident", "Skipped", None, message="Missing STEL ID", payload=item)
@@ -337,18 +340,32 @@ def sync_incident(item):
         if item.get("deleted") is True:
             return sync_deleted_incident(stel_id, item)
 
+        state_name = get_catalog_name(state_names, get_incident_state_id(item))
+        type_name = get_catalog_name(type_names, get_incident_type_id(item))
+        issue = sync_issue_from_incident(item, stel_id, state_name, type_name)
+
         existing = frappe.db.get_value("Task", {"custom_stel_id": stel_id}, "name")
         doc = frappe.get_doc("Task", existing) if existing else frappe.new_doc("Task")
 
         doc.subject = get_incident_subject(item, stel_id)
-        doc.status = get_task_status(item)
+        doc.status = get_task_status(item, state_name)
         doc.priority = get_task_priority(item)
+        if has_field(doc, "issue"):
+            doc.issue = issue.name
+        if has_field(doc, "type") and type_name:
+            doc.type = ensure_named_doc("Task Type", type_name)
+        if has_field(doc, "project"):
+            doc.project = get_project_by_stel_address_id(get_incident_address_id(item))
         if has_field(doc, "exp_start_date"):
-            doc.exp_start_date = normalize_date(get_first(item, "assigned-date", "date", "creation-date"))
+            doc.exp_start_date = normalize_date(
+                get_first(item, "assigned-date", "assignedDate", "date", "creation-date", "creationDate")
+            )
         if has_field(doc, "exp_end_date"):
-            doc.exp_end_date = normalize_date(get_first(item, "closing-date", "date"))
-        doc.description = build_incident_description(item)
+            doc.exp_end_date = normalize_date(get_first(item, "closing-date", "closingDate"))
+        doc.description = get_incident_description(item)
         doc.custom_stel_id = stel_id
+        if has_field(doc, "custom_stel_reference"):
+            doc.custom_stel_reference = get_incident_reference(item)
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
 
@@ -359,11 +376,22 @@ def sync_incident(item):
             doc.insert(ignore_permissions=True)
             action = "created"
 
-        assign_doc_to_employee(doc.doctype, doc.name, get_first(item, "assignee-id"))
-        log_sync("Incident", "Success", stel_id, "Task", doc.name, f"Task {action}", payload=item)
+        assignee_id = get_incident_assignee_id(item)
+        assign_doc_to_employee(issue.doctype, issue.name, assignee_id)
+        assign_doc_to_employee(doc.doctype, doc.name, assignee_id)
+        log_sync(
+            "Incident",
+            "Success",
+            stel_id,
+            "Task",
+            doc.name,
+            f"Issue {issue.name} linked; Task {action}",
+            payload=item,
+        )
         return action
     except Exception:
         mark_error("Task", stel_id)
+        mark_error("Issue", stel_id)
         log_sync("Incident", "Error", stel_id, message="Incident sync failed", error=traceback.format_exc(), payload=item)
         return "error"
 
@@ -554,29 +582,153 @@ def get_employee_names(item, stel_id):
     return str(first_name).strip(), str(last_name).strip() if last_name else ""
 
 
+def sync_issue_from_incident(item, stel_id, state_name=None, type_name=None):
+    existing = frappe.db.get_value("Issue", {"custom_stel_id": stel_id}, "name")
+    issue = frappe.get_doc("Issue", existing) if existing else frappe.new_doc("Issue")
+
+    issue.subject = get_incident_subject(item, stel_id)
+    issue.description = get_incident_description(item)
+    issue.status = get_issue_status(item, state_name)
+    issue.priority = ensure_named_doc("Issue Priority", get_issue_priority(item))
+    issue.issue_type = ensure_named_doc("Issue Type", type_name) if type_name else None
+    issue.project = get_project_by_stel_address_id(get_incident_address_id(item))
+
+    account_id = get_incident_account_id(item)
+    account_kind = str(get_first(item, "account-kind", "accountKind") or "client").casefold()
+    if account_kind in {"client", "customer"}:
+        issue.customer = get_customer_by_stel_id(account_id)
+        issue.lead = None
+    else:
+        issue.lead = get_lead_by_stel_id(account_id)
+        issue.customer = None
+
+    opened_at = normalize_datetime(
+        get_first(item, "date", "assigned-date", "assignedDate", "creation-date", "creationDate")
+    )
+    if opened_at:
+        opened_at = get_datetime(opened_at)
+        issue.opening_date = opened_at.date()
+        issue.opening_time = opened_at.time().replace(microsecond=0)
+
+    raw_closed_at = get_first(item, "closing-date", "closingDate")
+    closed_at = normalize_datetime(raw_closed_at) if raw_closed_at else None
+    if has_field(issue, "sla_resolution_date"):
+        issue.sla_resolution_date = closed_at
+    issue.resolution_details = get_first(item, "resolution") or None
+
+    custom_values = {
+        "custom_stel_id": stel_id,
+        "custom_stel_reference": get_incident_reference(item),
+        "custom_stel_address_id": get_incident_address_id(item),
+        "custom_stel_assignee_id": get_incident_assignee_id(item),
+        "custom_stel_creator_id": get_first(item, "creator-id", "creatorId"),
+        "custom_stel_state_id": get_incident_state_id(item),
+        "custom_stel_type_id": get_incident_type_id(item),
+        "custom_stel_external_id": get_first(item, "external-id", "externalId"),
+        "custom_stel_phone": get_first(item, "phone"),
+        "custom_stel_duration_minutes": get_first(item, "length"),
+        "custom_stel_last_sync": now(),
+        "custom_stel_sync_status": "Synced",
+    }
+    for fieldname, value in custom_values.items():
+        if has_field(issue, fieldname):
+            issue.set(fieldname, value)
+
+    if existing:
+        issue.save(ignore_permissions=True)
+    else:
+        issue.insert(ignore_permissions=True)
+    return issue
+
+
 def get_incident_subject(item, stel_id):
-    reference = get_first(item, "full-reference", "reference")
     title = get_first(item, "name", "subject", "title")
     description = get_first(item, "description")
-    summary = title or description
-    if reference and summary:
-        return f"{reference} - {summary}"[:140]
-    return (reference or summary or f"STEL Incident {stel_id}")[:140]
+    return str(title or description or get_incident_reference(item) or f"STEL Incident {stel_id}")[:140]
 
 
-def get_task_status(item):
+def get_incident_description(item):
+    return str(get_first(item, "description") or "").strip()
+
+
+def get_incident_reference(item):
+    return get_first(item, "full-reference", "fullReference", "reference")
+
+
+def get_incident_account_id(item):
+    return get_first(item, "account-id", "accountId")
+
+
+def get_incident_address_id(item):
+    return get_first(item, "address-id", "addressId")
+
+
+def get_incident_assignee_id(item):
+    return get_first(item, "assignee-id", "assigneeId")
+
+
+def get_incident_state_id(item):
+    return get_first(item, "incident-state-id", "incidentStateId", "stateId")
+
+
+def get_incident_type_id(item):
+    return get_first(item, "incident-type-id", "incidentTypeId", "typeId")
+
+
+def get_catalog_names(items):
+    return {
+        str(get_stel_id(item)): str(get_first(item, "name") or "").strip()
+        for item in items or []
+        if get_stel_id(item) and get_first(item, "name")
+    }
+
+
+def get_catalog_name(catalog, item_id):
+    return (catalog or {}).get(str(item_id)) if item_id not in (None, "") else None
+
+
+def get_state_key(state_name):
+    return str(state_name or "").strip().casefold()
+
+
+def get_issue_status(item, state_name=None):
+    if item.get("deleted") is True:
+        return "Closed"
+    state = get_state_key(state_name)
+    if state == "resuelta" or get_first(item, "closing-date", "closingDate", "resolution"):
+        return "Resolved"
+    if state == "atendida":
+        return "Replied"
+    return "Open"
+
+
+def get_task_status(item, state_name=None):
     if item.get("deleted") is True:
         return "Cancelled"
-    if get_first(item, "closing-date", "resolution"):
+    state = get_state_key(state_name)
+    if state == "resuelta" or get_first(item, "closing-date", "closingDate", "resolution"):
         return "Completed"
+    if state == "atendida":
+        return "Working"
     return "Open"
 
 
 def get_task_priority(item):
     priority = (get_first(item, "priority") or "").strip().upper()
-    if priority in {"HIGH", "URGENT"}:
+    if priority in {"VERYHIGH", "URGENT"}:
+        return "Urgent"
+    if priority == "HIGH":
         return "High"
-    if priority == "LOW":
+    if priority in {"VERYLOW", "LOW"}:
+        return "Low"
+    return "Medium"
+
+
+def get_issue_priority(item):
+    priority = (get_first(item, "priority") or "").strip().upper()
+    if priority in {"HIGH", "VERYHIGH", "URGENT"}:
+        return "High"
+    if priority in {"VERYLOW", "LOW"}:
         return "Low"
     return "Medium"
 
@@ -588,26 +740,6 @@ def get_event_status(item):
     if state in {"CLOSED", "DONE", "COMPLETED"}:
         return "Closed"
     return "Open"
-
-
-def build_incident_description(item):
-    customer = get_customer_by_stel_id(get_first(item, "account-id"))
-    place = get_place_by_stel_id(get_first(item, "address-id"))
-    address = get_address_by_stel_id(get_first(item, "address-id"))
-    assignee = get_employee_by_stel_id(get_first(item, "assignee-id"))
-
-    lines = [
-        get_first(item, "description"),
-        "",
-        f"STEL reference: {get_first(item, 'full-reference', 'reference') or ''}",
-        f"STEL incident ID: {get_stel_id(item)}",
-        f"Customer: {customer or get_first(item, 'account-id') or ''}",
-        f"Lugar/Address: {place or address or get_first(item, 'address-id') or ''}",
-        f"Assignee: {assignee or get_first(item, 'assignee-id') or ''}",
-        f"Phone: {get_first(item, 'phone') or ''}",
-        f"Resolution: {get_first(item, 'resolution') or ''}",
-    ]
-    return "\n".join(line for line in lines if line is not None).strip()
 
 
 def build_event_description(item):
@@ -643,6 +775,19 @@ def sync_deleted_event(stel_id, item):
 
 
 def sync_deleted_incident(stel_id, item):
+    issue_name = frappe.db.get_value("Issue", {"custom_stel_id": stel_id}, "name")
+    if issue_name:
+        frappe.db.set_value(
+            "Issue",
+            issue_name,
+            {
+                "status": "Closed",
+                "custom_stel_last_sync": now(),
+                "custom_stel_sync_status": "Skipped",
+            },
+            update_modified=False,
+        )
+
     task_name = frappe.db.get_value("Task", {"custom_stel_id": stel_id}, "name")
     if task_name:
         frappe.db.set_value(
@@ -730,6 +875,33 @@ def get_customer_by_stel_id(stel_customer_id):
     return frappe.db.get_value("Customer", {"custom_stel_id": str(stel_customer_id)}, "name")
 
 
+def get_lead_by_stel_id(stel_lead_id):
+    if not stel_lead_id:
+        return None
+
+    return frappe.db.get_value("Lead", {"custom_stel_id": str(stel_lead_id)}, "name")
+
+
+def get_project_by_stel_address_id(stel_address_id):
+    if not stel_address_id or not frappe.db.exists("DocType", "Project"):
+        return None
+    if not frappe.get_meta("Project").has_field("custom_lugar"):
+        return None
+
+    place_names = []
+    for doctype in ("Address", "Lugar"):
+        if frappe.db.exists("DocType", doctype) and frappe.get_meta(doctype).has_field("custom_stel_id"):
+            name = frappe.db.get_value(doctype, {"custom_stel_id": str(stel_address_id)}, "name")
+            if name:
+                place_names.append(name)
+
+    for place_name in place_names:
+        project = frappe.db.get_value("Project", {"custom_lugar": place_name}, "name")
+        if project:
+            return project
+    return None
+
+
 def get_place_by_stel_id(stel_address_id):
     if not stel_address_id or not frappe.db.exists("DocType", "Lugar"):
         return None
@@ -749,6 +921,15 @@ def get_task_by_stel_id(stel_incident_id):
         return None
 
     return frappe.db.get_value("Task", {"custom_stel_id": str(stel_incident_id)}, "name")
+
+
+def ensure_named_doc(doctype, name):
+    name = str(name or "").strip()
+    if not name:
+        return None
+    if not frappe.db.exists(doctype, name):
+        frappe.get_doc({"doctype": doctype, "name": name}).insert(ignore_permissions=True)
+    return name
 
 
 def get_default_company(doc):

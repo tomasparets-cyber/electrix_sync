@@ -35,6 +35,12 @@ class StelClient:
         endpoint = getattr(self.settings, "incidents_endpoint", None) or "/app/incidents"
         return self.get_collection(endpoint)
 
+    def get_incident_states(self):
+        return self.get_collection("/app/incidentStates")
+
+    def get_incident_types(self):
+        return self.get_collection("/app/incidentTypes")
+
     def get_events(self):
         endpoint = getattr(self.settings, "events_endpoint", None) or "/app/events"
         return self.get_collection(endpoint)
