@@ -556,10 +556,12 @@ def get_employee_names(item, stel_id):
 
 def get_incident_subject(item, stel_id):
     reference = get_first(item, "full-reference", "reference")
+    title = get_first(item, "name", "subject", "title")
     description = get_first(item, "description")
-    if reference and description:
-        return f"{reference} - {description}"[:140]
-    return (reference or description or f"STEL Incident {stel_id}")[:140]
+    summary = title or description
+    if reference and summary:
+        return f"{reference} - {summary}"[:140]
+    return (reference or summary or f"STEL Incident {stel_id}")[:140]
 
 
 def get_task_status(item):
