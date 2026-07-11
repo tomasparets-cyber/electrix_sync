@@ -1,5 +1,20 @@
 frappe.ui.form.on("Electrix Sync Settings", {
 	refresh(frm) {
+		frm.add_custom_button(__("Simular clientes, direcciones y contactos"), async () => {
+			const response = await frappe.call({
+				method: "electrix_sync.api.master_data.preview_customer_import",
+				freeze: true,
+				freeze_message: __("Analizando staging…"),
+			});
+			const r = response.message || {};
+			const row = (label, x = {}) => `<tr><td>${__(label)}</td><td>${x.create || 0}</td><td>${x.update || 0}</td><td>${x.unchanged || 0}</td><td>${x.conflict || 0}</td><td>${x.unlinked || 0}</td></tr>`;
+			frappe.msgprint({
+				title: __("Simulación STEL → ERPNext"),
+				wide: true,
+				message: `<p>${__("Simulación únicamente: no se ha creado ni modificado ningún documento ERPNext.")}</p><table class="table table-bordered"><thead><tr><th>${__("Recurso")}</th><th>${__("Crear")}</th><th>${__("Actualizar")}</th><th>${__("Sin cambios")}</th><th>${__("Conflictos")}</th><th>${__("Sin cliente")}</th></tr></thead><tbody>${row("Clientes", r.clients)}${row("Direcciones", r.addresses)}${row("Contactos", r.contacts)}${row("Total", r.totals)}</tbody></table>`,
+			});
+		}, __("STEL → ERPNext"));
+
 		frm.add_custom_button(__("Sincronizar cambios esenciales"), async () => {
 			const response = await frappe.call({
 				method: "electrix_sync.api.bulk_sync.start_incremental_sync",
