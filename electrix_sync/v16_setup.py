@@ -51,3 +51,8 @@ def ensure_master_data_fields():
     }
     available = {doctype: definitions for doctype, definitions in fields.items() if frappe.db.exists("DocType", doctype)}
     create_custom_fields(available, update=True)
+    # Custom fields are created from an after_migrate hook, after Frappe's
+    # normal schema pass. Force the physical columns to be added in this deploy.
+    for doctype in available:
+        frappe.clear_cache(doctype=doctype)
+        frappe.db.updatedb(doctype)

@@ -49,9 +49,7 @@ def preview_clients(rows):
     conflicts = []
     for row in rows:
         stel_id = row["remote_id"]
-        existing = frappe.db.get_value(
-            "Customer", {"custom_stel_id": stel_id}, ["name", "custom_stel_payload_hash"], as_dict=True
-        )
+        existing = get_existing("Customer", stel_id)
         if existing:
             counts["unchanged" if existing.custom_stel_payload_hash == row["payload_hash"] else "update"] += 1
             continue
@@ -70,16 +68,14 @@ def preview_linked(rows, doctype, staged_client_ids):
     counts = blank_counts()
     missing = []
     for row in rows:
-        existing = frappe.db.get_value(
-            doctype, {"custom_stel_id": row["remote_id"]}, ["name", "custom_stel_payload_hash"], as_dict=True
-        )
+        existing = get_existing(doctype, row["remote_id"])
         if existing:
             counts["unchanged" if existing.custom_stel_payload_hash == row["payload_hash"] else "update"] += 1
             continue
         account_id = row["data"].get("account-id")
         linked = account_id is not None and (
             str(account_id) in staged_client_ids
-            or frappe.db.exists("Customer", {"custom_stel_id": str(account_id)})
+            or customer_exists(str(account_id))
         )
         if linked:
             counts["create"] += 1
@@ -92,6 +88,27 @@ def preview_linked(rows, doctype, staged_client_ids):
 
 def blank_counts():
     return {"create": 0, "update": 0, "unchanged": 0, "conflict": 0, "unlinked": 0}
+
+
+def get_existing(doctype, stel_id):
+    if not frappe.db.has_column(doctype, "custom_stel_id"):
+        return None
+    fields = ["name"]
+    if frappe.db.has_column(doctype, "custom_stel_payload_hash"):
+        fields.append("custom_stel_payload_hash")
+    existing = frappe.db.get_value(
+        doctype, {"custom_stel_id": stel_id}, fields, as_dict=True
+    )
+    if existing and "custom_stel_payload_hash" not in existing:
+        existing.custom_stel_payload_hash = None
+    return existing
+
+
+def customer_exists(stel_id):
+    return bool(
+        frappe.db.has_column("Customer", "custom_stel_id")
+        and frappe.db.exists("Customer", {"custom_stel_id": stel_id})
+    )
 
 
 def sum_counts(groups):
