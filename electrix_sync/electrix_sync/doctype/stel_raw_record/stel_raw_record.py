@@ -1,5 +1,5 @@
 from frappe.model.document import Document
 
 
-class StelRawRecord(Document):
+class STELRawRecord(Document):
     pass
