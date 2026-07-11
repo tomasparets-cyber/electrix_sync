@@ -1,5 +1,19 @@
 frappe.ui.form.on("Electrix Sync Settings", {
 	refresh(frm) {
+		frm.add_custom_button(__("Sincronizar cambios esenciales"), async () => {
+			const response = await frappe.call({
+				method: "electrix_sync.api.bulk_sync.start_incremental_sync",
+				freeze: true,
+				freeze_message: __("Preparando lectura incremental…"),
+			});
+			const result = response.message || {};
+			frappe.show_alert({
+				message: __(`Sincronización incremental ${result.run} encolada (${result.resources} colecciones)`),
+				indicator: "green",
+			}, 8);
+			frappe.set_route("Form", "STEL Bulk Sync Run", result.run);
+		}, __("STEL Incremental"));
+
 		frm.add_custom_button(__("Leer todos los registros de STEL"), () => {
 			frappe.confirm(
 				__("Se leerán las 56 colecciones de STEL Order en segundo plano. No se modificará ningún dato en STEL ni se crearán documentos contables. ¿Continuar?"),

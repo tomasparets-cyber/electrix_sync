@@ -11,7 +11,9 @@
     "api_token",
     "auth_header_name",
     "auth_header_prefix",
-    "page_limit"
+    "page_limit",
+    "incremental_section",
+    "last_incremental_sync"
   ],
   "fields": [
     {
@@ -46,6 +48,17 @@
       "fieldname": "page_limit",
       "fieldtype": "Int",
       "label": "Registros por página"
+    },
+    {
+      "fieldname": "incremental_section",
+      "fieldtype": "Section Break",
+      "label": "Sincronización incremental"
+    },
+    {
+      "fieldname": "last_incremental_sync",
+      "fieldtype": "Datetime",
+      "label": "Última sincronización incremental",
+      "read_only": 1
     }
   ],
   "index_web_pages_for_search": 1,

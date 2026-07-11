@@ -1,17 +1,18 @@
 import hashlib
 import json
 import traceback
-from datetime import timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime, now
+from frappe.utils import get_datetime, get_system_timezone, now
 
 from electrix_sync.api.stel import StelClient
 
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "config" / "stel_bulk_endpoints.json"
+ESSENTIAL_RESOURCES = {"addresses", "clients", "contacts", "employees", "events", "incidents"}
 
 
 def get_manifest():
@@ -21,6 +22,15 @@ def get_manifest():
 
 @frappe.whitelist()
 def start_bulk_snapshot():
+    return start_sync("Full")
+
+
+@frappe.whitelist()
+def start_incremental_sync():
+    return start_sync("Incremental")
+
+
+def start_sync(sync_mode):
     frappe.only_for("System Manager")
     active = frappe.db.exists(
         "STEL Bulk Sync Run", {"status": ["in", ["Queued", "Running"]]}
@@ -28,11 +38,14 @@ def start_bulk_snapshot():
     if active:
         frappe.throw(_("A STEL bulk synchronization is already running: {0}").format(active))
 
-    manifest = get_manifest()
+    manifest = get_run_manifest(sync_mode)
+    since = get_incremental_since() if sync_mode == "Incremental" else None
     run = frappe.get_doc(
         {
             "doctype": "STEL Bulk Sync Run",
             "status": "Queued",
+            "sync_mode": sync_mode,
+            "incremental_since": since,
             "resources_total": len(manifest),
             "resource_index": 0,
         }
@@ -41,7 +54,13 @@ def start_bulk_snapshot():
     job = enqueue_resource(run.name)
     if job:
         frappe.db.set_value("STEL Bulk Sync Run", run.name, "job_id", job.id, update_modified=False)
-    return {"run": run.name, "resources": len(manifest), "job_id": getattr(job, "id", None)}
+    return {
+        "run": run.name,
+        "mode": sync_mode,
+        "since": since,
+        "resources": len(manifest),
+        "job_id": getattr(job, "id", None),
+    }
 
 
 @frappe.whitelist()
@@ -84,7 +103,7 @@ def enqueue_resource(run_name):
 
 def process_next_resource(run_name):
     run = frappe.get_doc("STEL Bulk Sync Run", run_name)
-    manifest = get_manifest()
+    manifest = get_run_manifest(run.sync_mode)
     if run.resource_index >= len(manifest):
         finish_run(run)
         return
@@ -99,7 +118,10 @@ def process_next_resource(run_name):
     frappe.db.commit()
 
     try:
-        items = StelClient().get_collection(resource["endpoint"])
+        filters = None
+        if run.sync_mode == "Incremental" and run.incremental_since:
+            filters = {"utc-last-modification-date": format_stel_utc(run.incremental_since)}
+        items = StelClient().get_collection(resource["endpoint"], filters=filters)
         counters = ingest_resource(run.name, resource, items)
         run.reload()
         run.records_read += counters["read"]
@@ -222,9 +244,48 @@ def finish_run(run):
     run.finished_at = now()
     run.current_resource = None
     run.save(ignore_permissions=True)
+    if run.sync_mode == "Incremental" and not run.error_count:
+        # Advance to the start of this run, not its end, so changes made while
+        # the requests were running are included next time.
+        frappe.db.set_single_value(
+            "Electrix Sync Settings", "last_incremental_sync", run.started_at
+        )
     frappe.db.commit()
     frappe.publish_realtime(
         "stel_bulk_complete",
         {"run": run.name, "status": run.status, "records": run.records_read},
         after_commit=True,
     )
+
+
+def get_run_manifest(sync_mode):
+    manifest = get_manifest()
+    if sync_mode == "Incremental":
+        return [row for row in manifest if row["key"] in ESSENTIAL_RESOURCES]
+    return manifest
+
+
+def get_incremental_since():
+    settings = frappe.get_single("Electrix Sync Settings")
+    cursor = settings.last_incremental_sync
+    if not cursor:
+        cursor = frappe.db.get_value(
+            "STEL Bulk Sync Run",
+            {"sync_mode": "Full", "status": "Completed"},
+            "started_at",
+            order_by="started_at desc",
+        )
+    if not cursor:
+        frappe.throw(_("Run one complete STEL snapshot before the first incremental sync."))
+    return get_datetime(cursor) - timedelta(minutes=5)
+
+
+def format_stel_utc(value):
+    # Frappe stores site-local naive datetimes. Convert explicitly to UTC for
+    # STEL's modification filter.
+    from zoneinfo import ZoneInfo
+
+    local = get_datetime(value)
+    if local.tzinfo is None:
+        local = local.replace(tzinfo=ZoneInfo(get_system_timezone()))
+    return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+0000")

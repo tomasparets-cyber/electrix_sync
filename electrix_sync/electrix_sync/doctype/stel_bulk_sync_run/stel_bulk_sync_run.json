@@ -4,10 +4,12 @@
  "creation": "2026-07-11 10:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["status_section", "status", "started_at", "finished_at", "job_id", "progress_section", "resource_index", "resources_total", "resources_completed", "current_resource", "records_read", "records_created", "records_updated", "records_unchanged", "error_count", "log_section", "error_log"],
+ "field_order": ["status_section", "status", "sync_mode", "incremental_since", "started_at", "finished_at", "job_id", "progress_section", "resource_index", "resources_total", "resources_completed", "current_resource", "records_read", "records_created", "records_updated", "records_unchanged", "error_count", "log_section", "error_log"],
  "fields": [
   {"fieldname": "status_section", "fieldtype": "Section Break", "label": "Status"},
   {"default": "Queued", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Queued\nRunning\nCompleted\nCompleted with Errors\nFailed", "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"default": "Full", "fieldname": "sync_mode", "fieldtype": "Select", "label": "Mode", "options": "Full\nIncremental", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "incremental_since", "fieldtype": "Datetime", "label": "Incremental Since", "read_only": 1},
   {"fieldname": "started_at", "fieldtype": "Datetime", "label": "Started At", "read_only": 1, "in_list_view": 1},
   {"fieldname": "finished_at", "fieldtype": "Datetime", "label": "Finished At", "read_only": 1},
   {"fieldname": "job_id", "fieldtype": "Data", "label": "Job ID", "read_only": 1},

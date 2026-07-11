@@ -57,13 +57,13 @@ class StelClient:
     def delete_event(self, event_id):
         return self._write("DELETE", f"/app/events/{event_id}")
 
-    def get_collection(self, endpoint):
+    def get_collection(self, endpoint, filters=None):
         if not endpoint:
             return []
 
         url = urljoin(self.base_url, endpoint.lstrip("/"))
         items = []
-        params = {"limit": self.page_limit, "start": 0}
+        params = {**(filters or {}), "limit": self.page_limit, "start": 0}
 
         while url:
             response = requests.get(url, headers=self._headers(), params=params, timeout=30)
