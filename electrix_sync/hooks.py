@@ -17,7 +17,13 @@ page_js = {"planning": "public/js/planning.js"}
 doc_events = {
     "Lugar": {
         "validate": "electrix_sync.api.locations.validate_lugar",
-    }
+    },
+    "Task": {
+        "on_update": "electrix_sync.api.outbound_sync.enqueue_task",
+    },
+    "Event": {
+        "on_update": "electrix_sync.api.outbound_sync.enqueue_event",
+    },
 }
 
 # Frappe v16 phase 1 deliberately only imports an immutable STEL snapshot into

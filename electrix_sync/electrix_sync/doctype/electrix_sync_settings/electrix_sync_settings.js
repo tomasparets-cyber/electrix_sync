@@ -1,5 +1,19 @@
 frappe.ui.form.on("Electrix Sync Settings", {
 	refresh(frm) {
+		frm.add_custom_button(__("Importación completa desde staging"), () => {
+			frappe.confirm(
+				__("Se importarán clientes, direcciones, lugares, contactos, empleados, incidencias/tareas y eventos desde la copia local ya descargada. No se harán nuevas lecturas ni escrituras en STEL. ¿Continuar?"),
+				async () => {
+					await frappe.call({
+						method: "electrix_sync.api.operational_sync.start_complete_import",
+						freeze: true,
+						freeze_message: __("Encolando importación completa…"),
+					});
+					frappe.show_alert({message: __("Importación completa iniciada en segundo plano."), indicator: "green"}, 10);
+				}
+			);
+		}, __("STEL → ERPNext"));
+
 		frm.add_custom_button(__("Reparar panel de Proyectos"), async () => {
 			const response = await frappe.call({
 				method: "electrix_sync.api.sidebar.repair_projects_sidebar",

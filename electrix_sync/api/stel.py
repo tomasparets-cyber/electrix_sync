@@ -57,6 +57,12 @@ class StelClient:
     def delete_event(self, event_id):
         return self._write("DELETE", f"/app/events/{event_id}")
 
+    def create_incident(self, payload):
+        return self._write("POST", "/app/incidents", payload)
+
+    def update_incident(self, incident_id, payload):
+        return self._write("PUT", f"/app/incidents/{incident_id}", payload)
+
     def get_collection(self, endpoint, filters=None):
         if not endpoint:
             return []

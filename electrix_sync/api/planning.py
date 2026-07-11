@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, get_system_timezone, nowdate
 
+from electrix_sync.api.master_data import get_staged
 from electrix_sync.api.stel import StelClient
 from electrix_sync.api.sync import get_stel_id, match_employee_calendar
 
@@ -69,8 +70,10 @@ def ensure_calendar_assignments():
 
 @frappe.whitelist()
 def repair_calendar_assignments():
-    client = StelClient()
-    calendars = client.get_calendars()
+    # Planning must never spend STEL API quota merely by opening the page.
+    # Calendars and events are rebuilt from the most recent immutable staging
+    # snapshot instead.
+    calendars = [row["data"] for row in get_staged("calendars")]
     employees = frappe.get_all("Employee", filters={"status": "Active"}, fields=["name", "employee_name"])
     employee_by_calendar = {}
     mapped_employees = 0
@@ -85,7 +88,8 @@ def repair_calendar_assignments():
         employee_by_calendar[str(calendar_id)] = employee.name
         mapped_employees += 1
 
-    stel_events = {str(get_stel_id(row)): row for row in client.get_events() if get_stel_id(row)}
+    staged_events = [row["data"] for row in get_staged("events")]
+    stel_events = {str(get_stel_id(row)): row for row in staged_events if get_stel_id(row)}
     erp_events = frappe.get_all(
         "Event",
         filters={"custom_stel_id": ["is", "set"]},
@@ -154,6 +158,7 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
     event.custom_stel_calendar_id = str(calendar_id)
     event.custom_planning_status = "Planned"
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
+    event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     set_event_participant(event, employee_doc.get("user_id"))
     return {"name": event.name, "stel_id": event.custom_stel_id}
@@ -172,6 +177,7 @@ def resize_event(event_name, starts_on, ends_on):
     event.starts_on = starts_on
     event.ends_on = ends_on
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
+    event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     return {"name": event.name}
 

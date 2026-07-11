@@ -28,6 +28,8 @@ def ensure_master_data_fields():
         {"fieldname": "custom_stel_id", "label": "STEL ID", "fieldtype": "Data", "unique": 1, "read_only": 1, "no_copy": 1},
         {"fieldname": "custom_stel_modified_at", "label": "STEL Modified At", "fieldtype": "Datetime", "read_only": 1, "no_copy": 1},
         {"fieldname": "custom_stel_payload_hash", "label": "STEL Payload Hash", "fieldtype": "Data", "read_only": 1, "hidden": 1, "no_copy": 1},
+        {"fieldname": "custom_stel_last_sync", "label": "STEL Last Sync", "fieldtype": "Datetime", "read_only": 1, "no_copy": 1},
+        {"fieldname": "custom_stel_sync_status", "label": "STEL Sync Status", "fieldtype": "Select", "options": "Pending\nSynced\nError\nSkipped", "read_only": 1, "no_copy": 1},
     ]
     fields = {
         "Customer": [
@@ -39,6 +41,8 @@ def ensure_master_data_fields():
             {"fieldname": "custom_stel_external_id", "label": "STEL External ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_phone_2"},
             {**common[1], "insert_after": "custom_stel_external_id"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
         ],
         "Address": [
             {**common[0], "insert_after": "address_title"},
@@ -47,6 +51,8 @@ def ensure_master_data_fields():
             {"fieldname": "custom_stel_external_id", "label": "STEL External ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_longitude"},
             {**common[1], "insert_after": "custom_stel_external_id"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
         ],
         "Contact": [
             {**common[0], "insert_after": "first_name"},
@@ -54,6 +60,8 @@ def ensure_master_data_fields():
             {"fieldname": "custom_stel_comments", "label": "STEL Comments", "fieldtype": "Small Text", "read_only": 1, "insert_after": "custom_stel_fax"},
             {**common[1], "insert_after": "custom_stel_comments"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
         ],
         "Project": [
             {
@@ -63,6 +71,49 @@ def ensure_master_data_fields():
                 "options": "Lugar",
                 "insert_after": "customer",
             },
+        ],
+        "Employee": [
+            {**common[0], "insert_after": "employee_name"},
+            {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_id"},
+            {**common[1], "insert_after": "custom_stel_calendar_id"},
+            {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
+        ],
+        "Task": [
+            {**common[0], "insert_after": "subject"},
+            {"fieldname": "custom_stel_reference", "label": "STEL Incident Reference", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_stel_address_id", "label": "STEL Address ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_reference"},
+            {"fieldname": "custom_stel_assignee_id", "label": "STEL Assignee ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_address_id"},
+            {"fieldname": "custom_stel_state_id", "label": "STEL State ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_assignee_id"},
+            {"fieldname": "custom_stel_type_id", "label": "STEL Type ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_state_id"},
+            {**common[1], "insert_after": "custom_stel_type_id"},
+            {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
+        ],
+        "Issue": [
+            {**common[0], "insert_after": "subject"},
+            {"fieldname": "custom_stel_reference", "label": "STEL Incident Reference", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_stel_address_id", "label": "STEL Address ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_reference"},
+            {"fieldname": "custom_stel_assignee_id", "label": "STEL Assignee ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_address_id"},
+            {"fieldname": "custom_stel_state_id", "label": "STEL State ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_assignee_id"},
+            {"fieldname": "custom_stel_type_id", "label": "STEL Type ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_state_id"},
+            {**common[1], "insert_after": "custom_stel_type_id"},
+            {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
+        ],
+        "Event": [
+            {**common[0], "insert_after": "subject"},
+            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_assigned_employee"},
+            {"fieldname": "custom_planning_status", "label": "Estado de planificación", "fieldtype": "Select", "options": "Unplanned\nPlanned\nCompleted", "default": "Unplanned", "insert_after": "custom_stel_calendar_id"},
+            {"fieldname": "custom_estimated_duration", "label": "Duración estimada (horas)", "fieldtype": "Float", "default": "1", "insert_after": "custom_planning_status"},
+            {**common[1], "insert_after": "custom_estimated_duration"},
+            {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
         ],
     }
     available = {doctype: definitions for doctype, definitions in fields.items() if frappe.db.exists("DocType", doctype)}
