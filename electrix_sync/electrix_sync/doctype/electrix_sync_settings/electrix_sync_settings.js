@@ -1,5 +1,19 @@
 frappe.ui.form.on("Electrix Sync Settings", {
 	refresh(frm) {
+		frm.add_custom_button(__("Importar clientes, direcciones, lugares y contactos"), () => {
+			frappe.confirm(
+				__("Se crearán o actualizarán documentos reales de ERPNext usando el staging validado. No se escribirá nada en STEL Order. ¿Continuar?"),
+				async () => {
+					const response = await frappe.call({
+						method: "electrix_sync.api.master_data.start_customer_import",
+						freeze: true,
+						freeze_message: __("Encolando importación…"),
+					});
+					frappe.show_alert({message: __("Importación en segundo plano iniciada. Revisa Electrix Sync Log."), indicator: "green"}, 10);
+				}
+			);
+		}, __("STEL → ERPNext"));
+
 		frm.add_custom_button(__("Simular clientes, direcciones y contactos"), async () => {
 			const response = await frappe.call({
 				method: "electrix_sync.api.master_data.preview_customer_import",

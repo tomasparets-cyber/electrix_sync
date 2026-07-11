@@ -21,7 +21,7 @@
       "fieldtype": "Select",
       "in_list_view": 1,
       "label": "Sync Type",
-      "options": "Customer\nLead\nAddress\nLugar\nEmployee\nUser\nIncident\nEvent"
+      "options": "Master Data\nCustomer\nLead\nAddress\nContact\nLugar\nEmployee\nUser\nIncident\nEvent"
     },
     {
       "fieldname": "status",

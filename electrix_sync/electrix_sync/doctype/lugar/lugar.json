@@ -4,9 +4,10 @@
  "creation": "2026-07-11 12:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["location_name", "status", "address_section", "address_line1", "address_line2", "postal_code", "city", "province", "country", "coordinates_section", "latitude", "longitude", "sync_section", "sync_policy", "stel_links"],
+ "field_order": ["location_name", "location_key", "status", "address_section", "address_line1", "address_line2", "postal_code", "city", "province", "country", "coordinates_section", "latitude", "longitude", "sync_section", "sync_policy", "stel_links"],
  "fields": [
   {"fieldname": "location_name", "fieldtype": "Data", "label": "Nombre del lugar", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "location_key", "fieldtype": "Data", "hidden": 1, "label": "Clave normalizada de ubicación", "read_only": 1, "unique": 1},
   {"default": "Activo", "fieldname": "status", "fieldtype": "Select", "label": "Estado", "options": "Activo\nInactivo", "in_list_view": 1},
   {"fieldname": "address_section", "fieldtype": "Section Break", "label": "Dirección física"},
   {"fieldname": "address_line1", "fieldtype": "Data", "label": "Dirección", "in_list_view": 1},

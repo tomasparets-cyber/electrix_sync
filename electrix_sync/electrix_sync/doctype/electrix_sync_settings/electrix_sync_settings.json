@@ -12,6 +12,9 @@
     "auth_header_name",
     "auth_header_prefix",
     "page_limit",
+    "erpnext_section",
+    "default_customer_group",
+    "default_territory",
     "incremental_section",
     "last_incremental_sync"
   ],
@@ -48,6 +51,23 @@
       "fieldname": "page_limit",
       "fieldtype": "Int",
       "label": "Registros por página"
+    },
+    {
+      "fieldname": "erpnext_section",
+      "fieldtype": "Section Break",
+      "label": "Valores predeterminados de ERPNext"
+    },
+    {
+      "fieldname": "default_customer_group",
+      "fieldtype": "Link",
+      "label": "Grupo de clientes predeterminado",
+      "options": "Customer Group"
+    },
+    {
+      "fieldname": "default_territory",
+      "fieldtype": "Link",
+      "label": "Territorio predeterminado",
+      "options": "Territory"
     },
     {
       "fieldname": "incremental_section",

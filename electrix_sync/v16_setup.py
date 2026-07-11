@@ -19,6 +19,7 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
+    add_projects_workspace_shortcuts()
 
 
 def ensure_master_data_fields():
@@ -70,3 +71,22 @@ def ensure_master_data_fields():
     for doctype in available:
         frappe.clear_cache(doctype=doctype)
         frappe.db.updatedb(doctype)
+
+
+def add_projects_workspace_shortcuts():
+    """Expose Lugar and Planificación alongside the standard project tools."""
+    if not frappe.db.exists("Workspace", "Projects"):
+        return
+    try:
+        workspace = frappe.get_doc("Workspace", "Projects")
+        existing = {row.link_to for row in workspace.get("shortcuts", [])}
+        if "Lugar" not in existing:
+            workspace.append("shortcuts", {"label": "Lugar", "type": "DocType", "link_to": "Lugar", "doc_view": "List"})
+        if "planning" not in existing:
+            workspace.append("shortcuts", {"label": "Planificación", "type": "Page", "link_to": "planning"})
+        workspace.flags.ignore_validate = True
+        workspace.save(ignore_permissions=True)
+    except Exception:
+        # Workspace layouts vary between Frappe releases. A layout issue must
+        # never block schema migration or data synchronization.
+        frappe.log_error(frappe.get_traceback(), "Could not add Electrix project shortcuts")
