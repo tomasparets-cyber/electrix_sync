@@ -1,0 +1,39 @@
+{
+ "actions": [],
+ "autoname": "format:LUGAR-{#####}",
+ "creation": "2026-07-11 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["location_name", "status", "address_section", "address_line1", "address_line2", "postal_code", "city", "province", "country", "coordinates_section", "latitude", "longitude", "sync_section", "sync_policy", "stel_links"],
+ "fields": [
+  {"fieldname": "location_name", "fieldtype": "Data", "label": "Nombre del lugar", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"default": "Activo", "fieldname": "status", "fieldtype": "Select", "label": "Estado", "options": "Activo\nInactivo", "in_list_view": 1},
+  {"fieldname": "address_section", "fieldtype": "Section Break", "label": "Dirección física"},
+  {"fieldname": "address_line1", "fieldtype": "Data", "label": "Dirección", "in_list_view": 1},
+  {"fieldname": "address_line2", "fieldtype": "Data", "label": "Dirección adicional"},
+  {"fieldname": "postal_code", "fieldtype": "Data", "label": "Código postal"},
+  {"fieldname": "city", "fieldtype": "Data", "label": "Ciudad", "in_list_view": 1},
+  {"fieldname": "province", "fieldtype": "Data", "label": "Provincia"},
+  {"fieldname": "country", "fieldtype": "Link", "label": "País", "options": "Country"},
+  {"fieldname": "coordinates_section", "fieldtype": "Section Break", "label": "Coordenadas"},
+  {"fieldname": "latitude", "fieldtype": "Float", "label": "Latitud"},
+  {"fieldname": "longitude", "fieldtype": "Float", "label": "Longitud"},
+  {"fieldname": "sync_section", "fieldtype": "Section Break", "label": "STEL Order"},
+  {"default": "Solo ERPNext", "fieldname": "sync_policy", "fieldtype": "Select", "label": "Política de sincronización", "options": "Solo ERPNext\nRecibir de STEL\nBidireccional", "reqd": 1, "in_standard_filter": 1},
+  {"fieldname": "stel_links", "fieldtype": "Table", "label": "Vínculos STEL por cliente", "options": "Lugar STEL Link"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-07-11 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Electrix Sync",
+ "name": "Lugar",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Projects Manager", "share": 1, "write": 1},
+  {"create": 1, "read": 1, "report": 1, "role": "Projects User", "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

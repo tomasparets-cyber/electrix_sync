@@ -19,7 +19,17 @@ def preview_customer_import():
     result = {
         "dry_run": True,
         "clients": preview_clients(staged["clients"]),
-        "addresses": preview_linked(staged["addresses"], "Address", staged_client_ids),
+        "addresses": preview_linked(
+            [row for row in staged["addresses"] if address_destination(row["data"]) == "Address"],
+            "Address",
+            staged_client_ids,
+        ),
+        "places": preview_places(
+            [row for row in staged["addresses"] if address_destination(row["data"]) == "Lugar"]
+        ),
+        "unclassified_addresses": len(
+            [row for row in staged["addresses"] if address_destination(row["data"]) is None]
+        ),
         "contacts": preview_linked(staged["contacts"], "Contact", staged_client_ids),
     }
     result["totals"] = sum_counts(result.values())
@@ -88,6 +98,28 @@ def preview_linked(rows, doctype, staged_client_ids):
 
 def blank_counts():
     return {"create": 0, "update": 0, "unchanged": 0, "conflict": 0, "unlinked": 0}
+
+
+def preview_places(rows):
+    counts = blank_counts()
+    for row in rows:
+        existing_parent = frappe.db.get_value(
+            "Lugar STEL Link", {"stel_address_id": row["remote_id"]}, "parent"
+        )
+        if existing_parent:
+            counts["update"] += 1
+        else:
+            counts["create"] += 1
+    return counts
+
+
+def address_destination(data):
+    address_type = (data.get("address-type") or "").upper()
+    if address_type in {"DEFAULT", "INVOICING"}:
+        return "Address"
+    if address_type in {"DELIVERY", "OTHER"}:
+        return "Lugar"
+    return None
 
 
 def get_existing(doctype, stel_id):

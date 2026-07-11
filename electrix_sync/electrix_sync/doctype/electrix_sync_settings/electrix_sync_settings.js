@@ -11,7 +11,7 @@ frappe.ui.form.on("Electrix Sync Settings", {
 			frappe.msgprint({
 				title: __("Simulación STEL → ERPNext"),
 				wide: true,
-				message: `<p>${__("Simulación únicamente: no se ha creado ni modificado ningún documento ERPNext.")}</p><table class="table table-bordered"><thead><tr><th>${__("Recurso")}</th><th>${__("Crear")}</th><th>${__("Actualizar")}</th><th>${__("Sin cambios")}</th><th>${__("Conflictos")}</th><th>${__("Sin cliente")}</th></tr></thead><tbody>${row("Clientes", r.clients)}${row("Direcciones", r.addresses)}${row("Contactos", r.contacts)}${row("Total", r.totals)}</tbody></table>`,
+				message: `<p>${__("Simulación únicamente: no se ha creado ni modificado ningún documento ERPNext.")}</p><table class="table table-bordered"><thead><tr><th>${__("Recurso")}</th><th>${__("Crear")}</th><th>${__("Actualizar")}</th><th>${__("Sin cambios")}</th><th>${__("Conflictos")}</th><th>${__("Sin cliente")}</th></tr></thead><tbody>${row("Clientes", r.clients)}${row("Direcciones administrativas", r.addresses)}${row("Lugares operativos", r.places)}${row("Contactos", r.contacts)}${row("Total", r.totals)}</tbody></table><p>${__("Direcciones con tipo no clasificable")}: ${r.unclassified_addresses || 0}</p>`,
 			});
 		}, __("STEL → ERPNext"));
 

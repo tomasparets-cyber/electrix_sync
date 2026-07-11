@@ -1,4 +1,4 @@
-from electrix_sync.api.master_data import blank_counts, customer_name, sum_counts
+from electrix_sync.api.master_data import address_destination, blank_counts, customer_name, sum_counts
 
 
 def test_customer_name_prefers_commercial_name():
@@ -18,3 +18,11 @@ def test_preview_counts_are_summed():
         "conflict": 0,
         "unlinked": 1,
     }
+
+
+def test_address_destination_uses_confirmed_business_rule():
+    assert address_destination({"address-type": "DEFAULT"}) == "Address"
+    assert address_destination({"address-type": "INVOICING"}) == "Address"
+    assert address_destination({"address-type": "DELIVERY"}) == "Lugar"
+    assert address_destination({"address-type": "OTHER"}) == "Lugar"
+    assert address_destination({"address-type": "UNKNOWN"}) is None

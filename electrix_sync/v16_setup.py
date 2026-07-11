@@ -8,7 +8,12 @@ def ensure_staging_doctypes():
     Explicit reloads make upgrades from the v15 app deterministic even when the
     site was originally installed before these DocTypes existed.
     """
-    for doctype_name in ("stel_bulk_sync_run", "stel_raw_record"):
+    for doctype_name in (
+        "stel_bulk_sync_run",
+        "stel_raw_record",
+        "lugar_stel_link",
+        "lugar",
+    ):
         frappe.reload_doc("electrix_sync", "doctype", doctype_name, force=True)
 
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
@@ -47,6 +52,15 @@ def ensure_master_data_fields():
             {"fieldname": "custom_stel_comments", "label": "STEL Comments", "fieldtype": "Small Text", "read_only": 1, "insert_after": "custom_stel_fax"},
             {**common[1], "insert_after": "custom_stel_comments"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
+        ],
+        "Project": [
+            {
+                "fieldname": "custom_service_location",
+                "label": "Lugar de servicio",
+                "fieldtype": "Link",
+                "options": "Lugar",
+                "insert_after": "customer",
+            },
         ],
     }
     available = {doctype: definitions for doctype, definitions in fields.items() if frappe.db.exists("DocType", doctype)}
