@@ -20,6 +20,7 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
     add_projects_workspace_shortcuts()
+    add_projects_sidebar_items()
 
 
 def ensure_master_data_fields():
@@ -90,3 +91,46 @@ def add_projects_workspace_shortcuts():
         # Workspace layouts vary between Frappe releases. A layout issue must
         # never block schema migration or data synchronization.
         frappe.log_error(frappe.get_traceback(), "Could not add Electrix project shortcuts")
+
+
+def add_projects_sidebar_items():
+    """Add Lugar and Planificación to Frappe v16's persistent Projects sidebar."""
+    if not frappe.db.exists("DocType", "Workspace Sidebar"):
+        return
+
+    sidebar_names = frappe.get_all(
+        "Workspace Sidebar", filters={"module": "Projects"}, pluck="name"
+    )
+    if frappe.db.exists("Workspace Sidebar", "Projects") and "Projects" not in sidebar_names:
+        sidebar_names.append("Projects")
+
+    desired = (
+        {"label": "Lugar", "type": "Link", "link_type": "DocType", "link_to": "Lugar", "icon": "map-pin"},
+        {"label": "Planificación", "type": "Link", "link_type": "Page", "link_to": "planning", "icon": "calendar"},
+    )
+    for sidebar_name in sidebar_names:
+        try:
+            sidebar = frappe.get_doc("Workspace Sidebar", sidebar_name)
+            existing_links = {item.link_to for item in sidebar.items if item.type == "Link"}
+            insertion_index = next(
+                (index + 1 for index, item in enumerate(sidebar.items) if item.link_to == "Task"),
+                len(sidebar.items),
+            )
+            changed = False
+            for item_data in desired:
+                if item_data["link_to"] in existing_links:
+                    continue
+                child = sidebar.append("items", item_data)
+                sidebar.items.pop()
+                sidebar.items.insert(insertion_index, child)
+                insertion_index += 1
+                changed = True
+            if changed:
+                sidebar.flags.ignore_validate = True
+                sidebar.save(ignore_permissions=True)
+        except Exception:
+            frappe.log_error(
+                frappe.get_traceback(), f"Could not update Projects sidebar {sidebar_name}"
+            )
+
+    frappe.clear_cache()
