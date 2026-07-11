@@ -1,5 +1,18 @@
 frappe.ui.form.on("Electrix Sync Settings", {
 	refresh(frm) {
+		frm.add_custom_button(__("Reparar panel de Proyectos"), async () => {
+			const response = await frappe.call({
+				method: "electrix_sync.api.sidebar.repair_projects_sidebar",
+				freeze: true,
+				freeze_message: __("Actualizando panel lateral…"),
+			});
+			const result = response.message || {};
+			frappe.msgprint({
+				title: __("Panel de Proyectos actualizado"),
+				message: `<pre>${frappe.utils.escape_html(JSON.stringify(result, null, 2))}</pre><p>${__("Recarga ERPNext completamente para ver los cambios.")}</p>`,
+			});
+		}, __("Herramientas"));
+
 		frm.add_custom_button(__("Importar clientes, direcciones, lugares y contactos"), () => {
 			frappe.confirm(
 				__("Se crearán o actualizarán documentos reales de ERPNext usando el staging validado. No se escribirá nada en STEL Order. ¿Continuar?"),

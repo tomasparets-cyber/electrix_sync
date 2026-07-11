@@ -96,41 +96,59 @@ def add_projects_workspace_shortcuts():
 def add_projects_sidebar_items():
     """Add Lugar and Planificación to Frappe v16's persistent Projects sidebar."""
     if not frappe.db.exists("DocType", "Workspace Sidebar"):
-        return
+        return {"updated": [], "missing": ["Workspace Sidebar DocType"]}
 
-    sidebar_names = frappe.get_all(
-        "Workspace Sidebar", filters={"module": "Projects"}, pluck="name"
+    sidebar_rows = frappe.get_all(
+        "Workspace Sidebar",
+        filters=[["Workspace Sidebar", "title", "like", "Projects%"]],
+        fields=["name", "title", "module", "for_user"],
     )
-    if frappe.db.exists("Workspace Sidebar", "Projects") and "Projects" not in sidebar_names:
-        sidebar_names.append("Projects")
+    module_rows = frappe.get_all(
+        "Workspace Sidebar",
+        filters={"module": "Projects"},
+        fields=["name", "title", "module", "for_user"],
+    )
+    by_name = {row.name: row for row in [*sidebar_rows, *module_rows]}
 
     desired = (
         {"label": "Lugar", "type": "Link", "link_type": "DocType", "link_to": "Lugar", "icon": "map-pin"},
         {"label": "Planificación", "type": "Link", "link_type": "Page", "link_to": "planning", "icon": "calendar"},
+        {"label": "Evento", "type": "Link", "link_type": "DocType", "link_to": "Event", "icon": "calendar-days"},
     )
-    for sidebar_name in sidebar_names:
+    updated = []
+    for sidebar_name in by_name:
         try:
-            sidebar = frappe.get_doc("Workspace Sidebar", sidebar_name)
-            existing_links = {item.link_to for item in sidebar.items if item.type == "Link"}
-            insertion_index = next(
-                (index + 1 for index, item in enumerate(sidebar.items) if item.link_to == "Task"),
-                len(sidebar.items),
+            items = frappe.get_all(
+                "Workspace Sidebar Item",
+                filters={"parent": sidebar_name, "parenttype": "Workspace Sidebar", "parentfield": "items"},
+                fields=["name", "idx", "link_to"],
+                order_by="idx asc",
             )
-            changed = False
-            for item_data in desired:
-                if item_data["link_to"] in existing_links:
-                    continue
-                child = sidebar.append("items", item_data)
-                sidebar.items.pop()
-                sidebar.items.insert(insertion_index, child)
-                insertion_index += 1
-                changed = True
-            if changed:
-                sidebar.flags.ignore_validate = True
-                sidebar.save(ignore_permissions=True)
+            existing_links = {item.link_to for item in items}
+            missing = [item for item in desired if item["link_to"] not in existing_links]
+            if not missing:
+                continue
+            task_idx = next((int(item.idx) for item in items if item.link_to == "Task"), len(items))
+            for item in reversed(items):
+                if int(item.idx or 0) > task_idx:
+                    frappe.db.set_value(
+                        "Workspace Sidebar Item", item.name, "idx", int(item.idx) + len(missing), update_modified=False
+                    )
+            for offset, item_data in enumerate(missing, start=1):
+                child = frappe.get_doc({
+                    "doctype": "Workspace Sidebar Item",
+                    "parent": sidebar_name,
+                    "parenttype": "Workspace Sidebar",
+                    "parentfield": "items",
+                    "idx": task_idx + offset,
+                    **item_data,
+                })
+                child.insert(ignore_permissions=True)
+            updated.append({"sidebar": sidebar_name, "added": [item["label"] for item in missing]})
         except Exception:
             frappe.log_error(
                 frappe.get_traceback(), f"Could not update Projects sidebar {sidebar_name}"
             )
 
     frappe.clear_cache()
+    return {"updated": updated, "sidebars_found": list(by_name)}
