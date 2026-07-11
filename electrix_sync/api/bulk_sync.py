@@ -1,6 +1,7 @@
 import hashlib
 import json
 import traceback
+from datetime import timezone
 from pathlib import Path
 
 import frappe
@@ -190,7 +191,13 @@ def get_source_modified(item):
         value = item.get(key)
         if value:
             try:
-                return get_datetime(value)
+                parsed = get_datetime(value)
+                # STEL returns ISO-8601 timestamps such as
+                # ``2026-04-30T04:30:03+00:00``. MariaDB DATETIME columns do
+                # not accept an offset, so retain the instant as naive UTC.
+                if parsed.tzinfo is not None:
+                    parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+                return parsed
             except Exception:
                 return None
     return None
