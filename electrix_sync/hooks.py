@@ -7,7 +7,18 @@ app_license = "MIT"
 
 # Hide the comments composer and activity timeline in Desk forms while keeping
 # the underlying audit history intact.
-app_include_css = "/assets/electrix_sync/css/desk.css"
+app_include_css = [
+    "/assets/electrix_sync/css/desk.css",
+    "/assets/electrix_sync/css/planning.css",
+]
+
+page_js = {"planning": "public/js/planning.js"}
+
+doc_events = {
+    "Lugar": {
+        "validate": "electrix_sync.api.locations.validate_lugar",
+    }
+}
 
 # Frappe v16 phase 1 deliberately only imports an immutable STEL snapshot into
 # staging.  The legacy v15 installer and scheduler create ERPNext documents and

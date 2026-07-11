@@ -2,6 +2,7 @@
  "actions": [],
  "autoname": "format:LUGAR-{#####}",
  "creation": "2026-07-11 12:00:00.000000",
+ "custom": 1,
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": ["location_name", "location_key", "status", "address_section", "address_line1", "address_line2", "postal_code", "city", "province", "country", "coordinates_section", "latitude", "longitude", "sync_section", "sync_policy", "stel_links"],
@@ -27,7 +28,7 @@
  "links": [],
  "modified": "2026-07-11 12:00:00.000000",
  "modified_by": "Administrator",
- "module": "Electrix Sync",
+ "module": "Projects",
  "name": "Lugar",
  "owner": "Administrator",
  "permissions": [
