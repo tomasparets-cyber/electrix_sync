@@ -12,8 +12,6 @@ app_include_css = [
     "/assets/electrix_sync/css/planning.css",
 ]
 
-page_js = {"planning": "public/js/planning.js"}
-
 doc_events = {
     "Lugar": {
         "validate": "electrix_sync.api.locations.validate_lugar",
