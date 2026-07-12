@@ -70,8 +70,7 @@ class ElectrixPlanning {
 		const days = this.data.days;
 		const dayHeaders = days.map((day) => `
 			<div class="planning-day-header">
-				<strong>${frappe.datetime.str_to_user(day).slice(0, 5)}</strong>
-				<span>${this.weekday(day)}</span>
+				<strong>${this.dayHeading(day)}</strong>
 			</div>`).join("");
 		const rows = this.data.employees.map((employee) => this.employeeRow(employee, days)).join("");
 		const unplanned = this.data.unplanned.map((event) => this.eventCard(event, true)).join("");
@@ -79,7 +78,7 @@ class ElectrixPlanning {
 		this.page.main.html(`
 			<div class="planning-shell">
 				<section class="planning-board">
-					<div class="planning-period">${frappe.datetime.str_to_user(days[0])} – ${frappe.datetime.str_to_user(days[days.length - 1])}</div>
+					<div class="planning-period">${this.monthHeading(days[0])}</div>
 					<div class="planning-grid planning-grid-header">
 						<div class="planning-employee-header">${__("Empleado")}</div>${dayHeaders}
 					</div>
@@ -262,6 +261,18 @@ class ElectrixPlanning {
 
 	weekday(day) {
 		return new Intl.DateTimeFormat(frappe.boot.lang || "es", { weekday: "short" }).format(new Date(`${day}T12:00:00`));
+	}
+
+	dayHeading(day) {
+		const date = new Date(`${day}T12:00:00`);
+		const value = new Intl.DateTimeFormat(frappe.boot.lang || "es", { weekday: "short", day: "numeric" }).format(date).replace(/[.,]/g, "");
+		return value.charAt(0).toUpperCase() + value.slice(1);
+	}
+
+	monthHeading(day) {
+		const date = new Date(`${day}T12:00:00`);
+		const month = new Intl.DateTimeFormat(frappe.boot.lang || "es", { month: "long" }).format(date);
+		return `${month.charAt(0).toUpperCase() + month.slice(1)} ${date.getFullYear()}`;
 	}
 
 	timeLabel(start, end) {

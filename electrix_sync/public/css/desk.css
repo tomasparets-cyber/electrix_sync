@@ -2,3 +2,10 @@
 .form-footer {
 	display: none !important;
 }
+
+/* Frappe nests these links in the DOM; add a clear visual hierarchy too. */
+.body-sidebar .section-item .nested-container {
+	margin-left: 14px;
+	padding-left: 8px;
+	border-left: 1px solid var(--border-color);
+}

@@ -126,6 +126,14 @@ def migrate_standard_status_and_type_fields():
     """Move earlier mirrored STEL values into standard ERPNext fields."""
     from electrix_sync.api.sync import normalize_event_category
 
+    if frappe.db.exists("DocType", "Customer") and frappe.db.has_column("Customer", "custom_stel_legal_name"):
+        for customer in frappe.get_all(
+            "Customer", filters={"custom_stel_legal_name": ["is", "set"]},
+            fields=["name", "alias", "custom_stel_legal_name"], limit_page_length=0,
+        ):
+            if not customer.alias and not frappe.db.exists("Customer", {"alias": customer.custom_stel_legal_name}):
+                frappe.db.set_value("Customer", customer.name, "alias", customer.custom_stel_legal_name, update_modified=False)
+
     event_meta = frappe.get_meta("Event") if frappe.db.exists("DocType", "Event") else None
     if not event_meta:
         return
@@ -277,7 +285,7 @@ def add_projects_sidebar_items():
                 "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                 "parenttype": "Workspace Sidebar", "parentfield": "items",
                 "idx": 7, "label": "Planificación", "type": "Section Break",
-                "collapsible": 1, "indent": 0, "show_arrow": 0, "keep_closed": 0,
+                "collapsible": 1, "indent": 1, "show_arrow": 0, "keep_closed": 0,
             }).insert(ignore_permissions=True)
             ordered_names.append(section.name)
             for idx, item_data in enumerate((

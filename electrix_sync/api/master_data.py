@@ -91,8 +91,9 @@ def import_customer(row, settings):
     values = {
         "customer_name": customer_name(data),
         "customer_type": "Company",
-        "customer_group": get_customer_group(settings, doc),
+        "customer_group": stel_customer_group(data) or get_customer_group(settings, doc),
         "territory": get_territory(settings, doc),
+        "alias": available_customer_alias(clean(data.get("legal-name")), existing.name if existing else None),
         "tax_id": tax_id,
         "email_id": clean(data.get("email")),
         "mobile_no": clean(data.get("phone")),
@@ -100,6 +101,7 @@ def import_customer(row, settings):
         "customer_details": clean(data.get("comments")),
         "default_currency": valid_currency(data.get("currency-code")),
         "disabled": 1 if data.get("deleted") is True else 0,
+        "account_manager": employee_user_for_stel_id(data.get("agent-id") or data.get("agentId")),
         "custom_stel_id": stel_id,
         "custom_stel_reference": clean(data.get("reference")),
         "custom_stel_full_reference": clean(data.get("full-reference")),
@@ -160,6 +162,8 @@ def import_contact(row):
     update_existing_fields(doc, {
         "first_name": clean(data.get("name")) or f"STEL {row['remote_id']}",
         "designation": clean(data.get("position")),
+        "company_name": frappe.db.get_value("Customer", customer, "customer_name"),
+        "status": "Passive" if data.get("deleted") is True else "Open",
         "custom_stel_id": row["remote_id"],
         "custom_stel_fax": clean(data.get("fax")),
         "custom_stel_comments": clean(data.get("comments")),
@@ -172,6 +176,8 @@ def import_contact(row):
     doc.set("phone_nos", [])
     if clean(data.get("phone")):
         doc.append("phone_nos", {"phone": clean(data.get("phone")), "is_primary_phone": 1})
+    if clean(data.get("fax")) and clean(data.get("fax")) != clean(data.get("phone")):
+        doc.append("phone_nos", {"phone": clean(data.get("fax"))})
     ensure_dynamic_link(doc, "Customer", customer)
     doc.save(ignore_permissions=True) if existing else doc.insert(ignore_permissions=True)
     return "updated" if existing else "created"
@@ -231,6 +237,46 @@ def get_customer_group(settings, doc):
 def get_territory(settings, doc):
     current = doc.get("territory") if doc else None
     return settings.default_territory or current or frappe.db.get_value("Territory", {}, "name", order_by="lft asc")
+
+
+def stel_customer_group(data):
+    category = staged_name("account_categories", data.get("account-category-id") or data.get("accountCategoryId"))
+    if not category:
+        return None
+    if not frappe.db.exists("Customer Group", category):
+        root = frappe.db.get_value("Customer Group", {"is_group": 1}, "name", order_by="lft asc")
+        frappe.get_doc({
+            "doctype": "Customer Group", "customer_group_name": category,
+            "parent_customer_group": root, "is_group": 0,
+        }).insert(ignore_permissions=True)
+    return category
+
+
+def staged_name(resource_type, remote_id):
+    if remote_id in (None, ""):
+        return None
+    row = frappe.db.get_value(
+        "STEL Raw Record", {"resource_type": resource_type, "remote_id": str(remote_id)}, "payload"
+    )
+    if not row:
+        return None
+    try:
+        return clean(json.loads(row).get("name"))
+    except (TypeError, ValueError):
+        return None
+
+
+def employee_user_for_stel_id(stel_id):
+    if stel_id in (None, "") or not frappe.db.has_column("Employee", "custom_stel_id"):
+        return None
+    return frappe.db.get_value("Employee", {"custom_stel_id": str(stel_id)}, "user_id")
+
+
+def available_customer_alias(value, current_name=None):
+    if not value:
+        return None
+    existing = frappe.db.get_value("Customer", {"alias": value}, "name")
+    return value if not existing or existing == current_name else None
 
 
 def valid_currency(code):
