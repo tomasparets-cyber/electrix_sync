@@ -602,17 +602,37 @@ def get_employee_names(item, stel_id):
 
 
 def match_employee_calendar(item, calendars):
+    employee_stel_id = get_stel_id(item)
     employee_name = normalize_match_text(get_first(item, "name", "full-name", "fullName"))
     if not employee_name:
         first_name, last_name = get_employee_names(item, get_stel_id(item) or "")
         employee_name = normalize_match_text(f"{first_name} {last_name}")
 
+    # A personal STEL calendar is named "Personal" for every user. Its stable
+    # relationship is therefore owner-id -> employee id, never its name.
+    if employee_stel_id:
+        owned = [
+            calendar for calendar in calendars or []
+            if str(get_first(calendar, "owner-id", "ownerId") or "") == str(employee_stel_id)
+            and calendar.get("deleted") is not True
+        ]
+        personal = next(
+            (calendar for calendar in owned if normalize_match_text(get_first(calendar, "name")) == "personal"),
+            None,
+        )
+        if personal:
+            return get_stel_id(personal)
+        if len(owned) == 1:
+            return get_stel_id(owned[0])
+
+    # Backward-compatible fallback for calendars created by the superadmin and
+    # shared with employees: match the calendar label to the employee name.
     best = None
     best_score = 0
     employee_tokens = set(employee_name.split())
     for calendar in calendars or []:
         calendar_name = normalize_match_text(get_first(calendar, "name"))
-        if not calendar_name or calendar_name == "personal":
+        if not calendar_name or calendar_name == "personal" or calendar.get("deleted") is True:
             continue
         calendar_tokens = set(calendar_name.split())
         score = len(employee_tokens & calendar_tokens)

@@ -74,12 +74,18 @@ def repair_calendar_assignments():
     # Calendars and events are rebuilt from the most recent immutable staging
     # snapshot instead.
     calendars = [row["data"] for row in get_staged("calendars")]
-    employees = frappe.get_all("Employee", filters={"status": "Active"}, fields=["name", "employee_name"])
+    employees = frappe.get_all(
+        "Employee",
+        filters={"status": "Active"},
+        fields=["name", "employee_name", "custom_stel_id"],
+    )
     employee_by_calendar = {}
     mapped_employees = 0
 
     for employee in employees:
-        calendar_id = match_employee_calendar({"name": employee.employee_name}, calendars)
+        calendar_id = match_employee_calendar(
+            {"id": employee.custom_stel_id, "name": employee.employee_name}, calendars
+        )
         if not calendar_id:
             continue
         frappe.db.set_value(

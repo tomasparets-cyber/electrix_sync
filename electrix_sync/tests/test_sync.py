@@ -76,3 +76,20 @@ def test_employee_calendar_matching_uses_shared_name_tokens():
     employee = {"id": 37033, "name": "Matias Cabanillas Sheremeta"}
 
     assert match_employee_calendar(employee, calendars) == "142754"
+
+
+def test_employee_calendar_matching_prefers_personal_calendar_owner():
+    calendars = [
+        {"id": 66176, "ownerId": 1, "name": "Personal"},
+        {"id": 78062, "ownerId": 1, "name": "Tomás Parets"},
+        {"id": 142754, "ownerId": 1, "name": "Matias Cabanillas"},
+    ]
+    employee = {"id": 1, "name": "Tomás Parets Fiol"}
+
+    assert match_employee_calendar(employee, calendars) == "66176"
+
+
+def test_employee_calendar_matching_supports_hyphenated_owner_id():
+    calendars = [{"id": 99, "owner-id": 42, "name": "Personal"}]
+
+    assert match_employee_calendar({"id": 42, "name": "Cati Coll"}, calendars) == "99"
