@@ -78,11 +78,12 @@ def ensure_calendar_assignments():
 
 
 @frappe.whitelist()
-def repair_calendar_assignments():
+def repair_calendar_assignments(refresh=False):
     # Planning must never spend STEL API quota merely by opening the page.
     # Calendars and events are rebuilt from the most recent immutable staging
     # snapshot instead.
-    calendars = [row["data"] for row in get_staged("calendars")]
+    refresh = str(refresh).lower() in {"1", "true", "yes"}
+    calendars = StelClient().get_calendars() if refresh else [row["data"] for row in get_staged("calendars")]
     employees = frappe.get_all(
         "Employee",
         filters={"status": "Active"},
@@ -90,12 +91,18 @@ def repair_calendar_assignments():
     )
     employee_by_calendar = {}
     mapped_employees = 0
+    unmatched_employees = []
 
     for employee in employees:
         calendar_id = match_employee_calendar(
             {"id": employee.custom_stel_id, "name": employee.employee_name}, calendars
         )
         if not calendar_id:
+            unmatched_employees.append({
+                "employee": employee.name,
+                "employee_name": employee.employee_name,
+                "stel_id": employee.custom_stel_id,
+            })
             continue
         frappe.db.set_value(
             "Employee", employee.name, "custom_stel_calendar_id", str(calendar_id), update_modified=False
@@ -149,6 +156,8 @@ def repair_calendar_assignments():
         "employees": mapped_employees,
         "events": mapped_events,
         "calendars": len(calendars),
+        "unmatched": unmatched_employees,
+        "source": "STEL API" if refresh else "staging",
     }
 
 

@@ -29,14 +29,17 @@ class ElectrixPlanning {
 	async repairCalendars() {
 		const response = await frappe.call({
 			method: "electrix_sync.api.planning.repair_calendar_assignments",
+			args: { refresh: 1 },
 			freeze: true,
 			freeze_message: __("Relacionando calendarios, empleados y eventos…"),
 		});
 		const result = response.message || {};
-		frappe.show_alert({
-			message: __(`Calendarios sincronizados: ${result.employees || 0} empleados, ${result.events || 0} eventos`),
-			indicator: "green",
-		}, 7);
+		const missing = (result.unmatched || []).map((row) => row.employee_name).join(", ");
+		frappe.msgprint({
+			title: __("Sincronización de calendarios"),
+			message: `<p>${__("Calendarios leídos")}: ${result.calendars || 0}</p><p>${__("Empleados asociados")}: ${result.employees || 0}</p><p>${__("Eventos asociados")}: ${result.events || 0}</p>${missing ? `<p><strong>${__("Sin asociación")}:</strong> ${frappe.utils.escape_html(missing)}</p>` : ""}`,
+			indicator: missing ? "orange" : "green",
+		});
 		await this.load();
 	}
 
