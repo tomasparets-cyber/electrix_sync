@@ -182,6 +182,8 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
             replace_stel_event(event, calendar_id, starts_on, ends_on)
         else:
             update_stel_event(event, starts_on, ends_on)
+    else:
+        create_stel_event(event, calendar_id, starts_on, ends_on)
 
     event.starts_on = starts_on
     event.ends_on = ends_on
@@ -193,6 +195,72 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
     event.save(ignore_permissions=True)
     set_event_participant(event, employee_doc.get("user_id"))
     return {"name": event.name, "stel_id": event.custom_stel_id}
+
+
+@frappe.whitelist()
+def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_type=None, event_state="PENDING"):
+    employee_doc = frappe.get_doc("Employee", employee)
+    calendar_id = employee_doc.get("custom_stel_calendar_id")
+    if not calendar_id:
+        frappe.throw(_("Employee {0} has no STEL calendar assigned").format(employee_doc.employee_name))
+    starts_on = get_datetime(starts_on)
+    ends_on = get_datetime(ends_on)
+    if ends_on <= starts_on:
+        frappe.throw(_("End time must be after start time"))
+    event = frappe.new_doc("Event")
+    event.subject = subject
+    event.description = description
+    event.starts_on = starts_on
+    event.ends_on = ends_on
+    event.event_type = "Private"
+    event.custom_assigned_employee = employee
+    event.custom_stel_calendar_id = str(calendar_id)
+    event.custom_stel_event_type = event_type or None
+    event.custom_stel_event_state = event_state or "PENDING"
+    event.custom_planning_status = "Planned"
+    event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
+    event.flags.skip_stel_outbound = True
+    event.insert(ignore_permissions=True)
+    create_stel_event(event, calendar_id, starts_on, ends_on)
+    frappe.db.set_value("Event", event.name, "custom_stel_id", event.custom_stel_id, update_modified=False)
+    set_event_participant(event, employee_doc.get("user_id"))
+    return {"name": event.name, "stel_id": event.custom_stel_id}
+
+
+@frappe.whitelist()
+def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_type=None, event_state="PENDING"):
+    event = frappe.get_doc("Event", event_name)
+    event.check_permission("write")
+    starts_on = get_datetime(starts_on)
+    ends_on = get_datetime(ends_on)
+    if ends_on <= starts_on:
+        frappe.throw(_("End time must be after start time"))
+    event.subject = subject
+    event.description = description
+    event.starts_on = starts_on
+    event.ends_on = ends_on
+    event.custom_stel_event_type = event_type or None
+    event.custom_stel_event_state = event_state or "PENDING"
+    event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
+    if not event.get("custom_assigned_employee") or not event.get("custom_stel_calendar_id"):
+        event.flags.skip_stel_outbound = True
+    event.save(ignore_permissions=True)
+    return {"name": event.name, "stel_id": event.custom_stel_id}
+
+
+@frappe.whitelist()
+def unplan_event(event_name):
+    event = frappe.get_doc("Event", event_name)
+    event.check_permission("write")
+    if event.get("custom_stel_id"):
+        StelClient().delete_event(event.custom_stel_id)
+    event.custom_stel_id = None
+    event.custom_stel_calendar_id = None
+    event.custom_assigned_employee = None
+    event.custom_planning_status = "Unplanned"
+    event.flags.skip_stel_outbound = True
+    event.save(ignore_permissions=True)
+    return {"name": event.name}
 
 
 @frappe.whitelist()
@@ -245,6 +313,25 @@ def replace_stel_event(event, calendar_id, starts_on, ends_on):
         except Exception:
             pass
         raise
+    event.custom_stel_id = str(new_id)
+
+
+def create_stel_event(event, calendar_id, starts_on, ends_on):
+    payload = {
+        "subject": (event.subject or "")[:128],
+        "description": (event.description or "")[:5000],
+        "start-date": stel_datetime(starts_on),
+        "end-date": stel_datetime(ends_on),
+        "all-day": bool(event.get("all_day")),
+        "calendar-id": int(calendar_id),
+        "event-state": erp_event_state(event),
+    }
+    if event.get("custom_stel_event_type"):
+        payload["event-type-id"] = int(event.custom_stel_event_type)
+    created = StelClient().create_event(payload)
+    new_id = extract_stel_id(created)
+    if not new_id:
+        frappe.throw(_("STEL created the event but did not return its ID"))
     event.custom_stel_id = str(new_id)
 
 

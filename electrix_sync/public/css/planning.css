@@ -9,12 +9,14 @@
 .planning-row { min-height: 105px; border-bottom: 1px solid var(--border-color); }
 .planning-employee { padding: 12px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 3px; }
 .planning-employee em { color: var(--orange-500); font-size: 11px; font-style: normal; }
-.planning-cell { padding: 7px; border-right: 1px solid var(--border-color); min-width: 0; transition: background .15s; }
+.planning-cell { padding: 7px; border-right: 1px solid var(--border-color); min-width: 0; transition: background .15s; cursor: cell; }
 .planning-cell.is-over { background: var(--blue-50); outline: 2px dashed var(--blue-400); outline-offset: -3px; }
 .planning-event { position: relative; margin-bottom: 6px; padding: 8px 9px; border-radius: 8px; background: var(--blue-100); border-left: 3px solid var(--blue-500); cursor: grab; display: flex; flex-direction: column; gap: 2px; }
 .planning-event strong { font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
 .planning-event span, .planning-event small { color: var(--text-muted); font-size: 11px; }
 .planning-backlog { background: var(--subtle-fg); padding: 14px; }
+.planning-backlog-list { min-height: 180px; border-radius: 8px; transition: background .15s, outline .15s; }
+.planning-backlog-list.is-over { background: var(--orange-50); outline: 2px dashed var(--orange-400); outline-offset: 4px; }
 .planning-backlog-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 16px; }
 .planning-backlog-title span { background: var(--gray-200); border-radius: 10px; padding: 2px 8px; font-size: 12px; }
 .planning-search { margin-bottom: 12px; }

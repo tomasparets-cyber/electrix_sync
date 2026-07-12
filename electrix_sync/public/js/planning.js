@@ -11,6 +11,7 @@ class ElectrixPlanning {
 		});
 		this.startDate = frappe.datetime.get_today();
 		this.draggedEvent = null;
+		this.wasDragging = false;
 		this.buildActions();
 		this.load();
 	}
@@ -117,20 +118,108 @@ class ElectrixPlanning {
 
 	bind() {
 		this.page.main.find(".planning-event").on("dragstart", (event) => {
+			this.wasDragging = true;
 			this.draggedEvent = event.currentTarget.dataset.event;
 			event.originalEvent.dataTransfer.setData("text/plain", this.draggedEvent);
-		});
+		}).on("dragend", () => setTimeout(() => { this.wasDragging = false; }, 50))
+			.on("click", (event) => {
+				if (!this.wasDragging) this.editEvent(event.currentTarget.dataset.event);
+			});
 		this.page.main.find(".planning-cell").on("dragover", (event) => {
 			event.preventDefault();
 			event.currentTarget.classList.add("is-over");
 		}).on("dragleave", (event) => event.currentTarget.classList.remove("is-over"))
-			.on("drop", (event) => this.drop(event));
+			.on("drop", (event) => this.drop(event))
+			.on("click", (event) => {
+				if (event.target === event.currentTarget) this.createInCell(event.currentTarget);
+			});
+		this.page.main.find(".planning-backlog-list").on("dragover", (event) => {
+			event.preventDefault();
+			event.currentTarget.classList.add("is-over");
+		}).on("dragleave", (event) => event.currentTarget.classList.remove("is-over"))
+			.on("drop", (event) => this.dropToBacklog(event));
 		this.page.main.find(".planning-search").on("input", (event) => {
 			const value = event.currentTarget.value.toLowerCase();
 			this.page.main.find(".planning-backlog .planning-event").each((_, card) => {
 				card.style.display = card.dataset.search.includes(value) ? "" : "none";
 			});
 		});
+	}
+
+	createInCell(cell) {
+		const startsOn = `${cell.dataset.date} 08:00:00`;
+		const endsOn = `${cell.dataset.date} 09:00:00`;
+		const dialog = new frappe.ui.Dialog({
+			title: __("Nuevo evento"),
+			fields: this.eventFields({ starts_on: startsOn, ends_on: endsOn, custom_stel_event_state: "PENDING" }),
+			primary_action_label: __("Crear y planificar"),
+			primary_action: async (values) => {
+				await frappe.call({
+					method: "electrix_sync.api.planning.create_planned_event",
+					args: { employee: cell.dataset.employee, ...values },
+					freeze: true,
+					freeze_message: __("Creando evento en ERPNext y STEL…"),
+				});
+				dialog.hide();
+				await this.load();
+			},
+		});
+		dialog.show();
+	}
+
+	editEvent(eventName) {
+		const source = [...this.data.events, ...this.data.unplanned].find((row) => row.name === eventName);
+		if (!source) return;
+		const dialog = new frappe.ui.Dialog({
+			title: __("Editar evento"),
+			fields: [
+				...this.eventFields(source),
+				{ fieldtype: "Button", fieldname: "unplan", label: __("Pasar a sin programar"), click: () => this.unplanEvent(source.name, dialog) },
+			],
+			primary_action_label: __("Guardar"),
+			primary_action: async (values) => {
+				delete values.unplan;
+				await frappe.call({
+					method: "electrix_sync.api.planning.edit_planned_event",
+					args: { event_name: source.name, ...values },
+					freeze: true,
+					freeze_message: __("Actualizando ERPNext y STEL…"),
+				});
+				dialog.hide();
+				await this.load();
+			},
+		});
+		dialog.show();
+	}
+
+	eventFields(source) {
+		return [
+			{ fieldtype: "Data", fieldname: "subject", label: __("Asunto"), reqd: 1, default: source.subject || "" },
+			{ fieldtype: "Small Text", fieldname: "description", label: __("Descripción"), default: source.description || "" },
+			{ fieldtype: "Datetime", fieldname: "starts_on", label: __("Inicio"), reqd: 1, default: source.starts_on },
+			{ fieldtype: "Datetime", fieldname: "ends_on", label: __("Fin"), reqd: 1, default: source.ends_on },
+			{ fieldtype: "Link", fieldname: "event_type", label: __("Tipo de evento STEL"), options: "STEL Event Type", default: source.custom_stel_event_type || "" },
+			{ fieldtype: "Select", fieldname: "event_state", label: __("Estado STEL"), options: "PENDING\nCOMPLETED\nREFUSED", default: source.custom_stel_event_state || "PENDING" },
+		];
+	}
+
+	async unplanEvent(eventName, dialog) {
+		await frappe.call({
+			method: "electrix_sync.api.planning.unplan_event",
+			args: { event_name: eventName },
+			freeze: true,
+			freeze_message: __("Pasando evento a sin programar…"),
+		});
+		dialog?.hide();
+		await this.load();
+	}
+
+	async dropToBacklog(event) {
+		event.preventDefault();
+		event.currentTarget.classList.remove("is-over");
+		const eventName = event.originalEvent.dataTransfer.getData("text/plain") || this.draggedEvent;
+		const source = this.data.events.find((row) => row.name === eventName);
+		if (source) await this.unplanEvent(source.name);
 	}
 
 	async drop(event) {
