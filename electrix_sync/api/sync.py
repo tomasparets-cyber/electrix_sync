@@ -2,9 +2,10 @@ import json
 import re
 import traceback
 import unicodedata
+from zoneinfo import ZoneInfo
 
 import frappe
-from frappe.utils import now, today, validate_email_address, validate_phone_number
+from frappe.utils import get_system_timezone, now, today, validate_email_address, validate_phone_number
 from frappe.utils.data import get_datetime
 
 from electrix_sync.api.stel import StelClient, StelPermissionError
@@ -409,8 +410,12 @@ def sync_event(item, event_type_names=None):
         if item.get("deleted") is True:
             return sync_deleted_event(stel_id, item)
 
-        existing = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name")
+        assignment_parent = frappe.db.get_value(
+            "STEL Event Assignment", {"stel_event_id": stel_id}, "parent"
+        ) if frappe.db.exists("DocType", "STEL Event Assignment") else None
+        existing = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name") or assignment_parent
         doc = frappe.get_doc("Event", existing) if existing else frappe.new_doc("Event")
+        is_secondary = bool(assignment_parent and doc.get("custom_stel_id") and str(doc.custom_stel_id) != str(stel_id))
 
         doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
         doc.event_type = "Private"
@@ -421,7 +426,8 @@ def sync_event(item, event_type_names=None):
         if has_field(doc, "status"):
             doc.status = get_event_status(item)
         doc.description = build_event_description(item)
-        doc.custom_stel_id = stel_id
+        if not is_secondary:
+            doc.custom_stel_id = stel_id
         event_type_id = get_first(item, "event-type-id", "eventTypeId")
         if event_type_id and has_field(doc, "custom_stel_event_type"):
             event_type_id = str(event_type_id)
@@ -432,9 +438,9 @@ def sync_event(item, event_type_names=None):
             doc.custom_stel_event_state = stel_state
         calendar_id = get_first(item, "calendar-id", "calendarId")
         employee = get_employee_by_stel_calendar_id(calendar_id)
-        if has_field(doc, "custom_stel_calendar_id"):
+        if has_field(doc, "custom_stel_calendar_id") and not is_secondary:
             doc.custom_stel_calendar_id = calendar_id
-        if has_field(doc, "custom_assigned_employee"):
+        if has_field(doc, "custom_assigned_employee") and not is_secondary:
             doc.custom_assigned_employee = employee
         if has_field(doc, "custom_planning_status"):
             doc.custom_planning_status = "Completed" if stel_state == "COMPLETED" else (
@@ -447,12 +453,15 @@ def sync_event(item, event_type_names=None):
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
 
+        doc.flags.skip_stel_outbound = True
         if existing:
             doc.save(ignore_permissions=True)
             action = "updated"
         else:
             doc.insert(ignore_permissions=True)
             action = "created"
+
+        sync_event_assignment(doc, employee, calendar_id, stel_id)
 
         add_event_participant(doc, get_first(item, "creator-id", "creatorId"))
         log_sync("Event", "Success", stel_id, "Event", doc.name, f"Event {action}", payload=item)
@@ -832,6 +841,22 @@ def ensure_stel_event_type(stel_id, event_type_name=None):
     return stel_id
 
 
+def sync_event_assignment(event, employee, calendar_id, stel_event_id):
+    if not employee or not calendar_id or not event.meta.has_field("custom_stel_assignments"):
+        return
+    assignment = next(
+        (row for row in event.custom_stel_assignments if str(row.stel_event_id or "") == str(stel_event_id)),
+        None,
+    )
+    if not assignment:
+        assignment = event.append("custom_stel_assignments", {})
+    assignment.employee = employee
+    assignment.stel_calendar_id = str(calendar_id)
+    assignment.stel_event_id = str(stel_event_id)
+    event.flags.skip_stel_outbound = True
+    event.save(ignore_permissions=True)
+
+
 def build_event_description(item):
     customer = get_customer_by_stel_id(get_first(item, "account-id"))
     incident_task = get_task_by_stel_id(get_first(item, "incident-id"))
@@ -1106,7 +1131,10 @@ def normalize_datetime(value):
         return now()
 
     try:
-        return get_datetime(value).strftime("%Y-%m-%d %H:%M:%S")
+        parsed = get_datetime(value)
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(ZoneInfo(get_system_timezone())).replace(tzinfo=None)
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         value = str(value).strip().replace("T", " ")
         return value[:19]

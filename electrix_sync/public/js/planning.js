@@ -9,7 +9,7 @@ class ElectrixPlanning {
 			title: __("Planificación"),
 			single_column: true,
 		});
-		this.startDate = frappe.datetime.get_today();
+		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.draggedEvent = null;
 		this.wasDragging = false;
 		this.buildActions();
@@ -20,7 +20,7 @@ class ElectrixPlanning {
 		this.page.add_inner_button(__("Sincronizar calendarios"), () => this.repairCalendars());
 		this.page.add_inner_button(__("Anterior"), () => this.shiftWeek(-7));
 		this.page.add_inner_button(__("Hoy"), () => {
-			this.startDate = frappe.datetime.get_today();
+			this.startDate = this.startOfWeek(frappe.datetime.get_today());
 			this.load();
 		});
 		this.page.add_inner_button(__("Siguiente"), () => this.shiftWeek(7));
@@ -47,6 +47,12 @@ class ElectrixPlanning {
 	shiftWeek(days) {
 		this.startDate = frappe.datetime.add_days(this.startDate, days);
 		this.load();
+	}
+
+	startOfWeek(value) {
+		const date = new Date(`${value}T12:00:00`);
+		const daysSinceMonday = (date.getDay() + 6) % 7;
+		return frappe.datetime.add_days(value, -daysSinceMonday);
 	}
 
 	async load() {
@@ -91,7 +97,7 @@ class ElectrixPlanning {
 	employeeRow(employee, days) {
 		const cells = days.map((day) => {
 			const events = this.data.events.filter((event) =>
-				event.custom_assigned_employee === employee.name && (event.starts_on || "").slice(0, 10) === day
+				(event.assigned_employees || [event.custom_assigned_employee]).includes(employee.name) && (event.starts_on || "").slice(0, 10) === day
 			);
 			return `<div class="planning-cell" data-employee="${employee.name}" data-date="${day}">
 				${events.map((event) => this.eventCard(event, false)).join("")}
@@ -151,7 +157,7 @@ class ElectrixPlanning {
 		const endsOn = `${cell.dataset.date} 09:00:00`;
 		const dialog = new frappe.ui.Dialog({
 			title: __("Nuevo evento"),
-			fields: this.eventFields({ starts_on: startsOn, ends_on: endsOn, custom_stel_event_state: "PENDING" }),
+			fields: this.eventFields({ starts_on: startsOn, ends_on: endsOn, custom_stel_event_state: "PENDING", assigned_employees: [cell.dataset.employee] }),
 			primary_action_label: __("Crear y planificar"),
 			primary_action: async (values) => {
 				await frappe.call({
@@ -200,6 +206,7 @@ class ElectrixPlanning {
 			{ fieldtype: "Datetime", fieldname: "ends_on", label: __("Fin"), reqd: 1, default: source.ends_on },
 			{ fieldtype: "Link", fieldname: "event_type", label: __("Tipo de evento STEL"), options: "STEL Event Type", default: source.custom_stel_event_type || "" },
 			{ fieldtype: "Select", fieldname: "event_state", label: __("Estado STEL"), options: "PENDING\nCOMPLETED\nREFUSED", default: source.custom_stel_event_state || "PENDING" },
+			{ fieldtype: "MultiSelectList", fieldname: "employees", label: __("Empleados"), default: source.assigned_employees || [], get_data: (text) => frappe.db.get_link_options("Employee", text, { status: "Active" }) },
 		];
 	}
 
