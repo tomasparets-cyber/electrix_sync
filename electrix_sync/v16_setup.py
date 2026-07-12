@@ -151,7 +151,7 @@ def add_projects_workspace_shortcuts():
 
 
 def add_projects_sidebar_items():
-    """Add Lugar and Planificación to Frappe v16's persistent Projects sidebar."""
+    """Build the managed part of Frappe v16's persistent Projects sidebar."""
     if not frappe.db.exists("DocType", "Workspace Sidebar"):
         return {"updated": [], "missing": ["Workspace Sidebar DocType"]}
 
@@ -167,10 +167,13 @@ def add_projects_sidebar_items():
     )
     by_name = {row.name: row for row in [*sidebar_rows, *module_rows]}
 
-    desired = (
-        {"label": "Lugar", "type": "Link", "link_type": "DocType", "link_to": "Lugar", "icon": "map-pin"},
-        {"label": "Planificación", "type": "Link", "link_type": "Page", "link_to": "planning", "icon": "calendar"},
-        {"label": "Evento", "type": "Link", "link_type": "DocType", "link_to": "Event", "icon": "calendar-days"},
+    desired_links = (
+        {"label": "Home", "link_type": "Workspace", "link_to": "Projects", "icon": "home"},
+        {"label": "Tablero", "link_type": "Page", "link_to": "project-dashboard", "icon": "bar-chart-2"},
+        {"label": "Lugar", "link_type": "DocType", "link_to": "Lugar", "icon": "map-pin"},
+        {"label": "Project", "link_type": "DocType", "link_to": "Project", "icon": "briefcase"},
+        {"label": "Task", "link_type": "DocType", "link_to": "Task", "icon": "list-checks"},
+        {"label": "Event", "link_type": "DocType", "link_to": "Event", "icon": "calendar-days"},
     )
     updated = []
     for sidebar_name in by_name:
@@ -178,30 +181,76 @@ def add_projects_sidebar_items():
             items = frappe.get_all(
                 "Workspace Sidebar Item",
                 filters={"parent": sidebar_name, "parenttype": "Workspace Sidebar", "parentfield": "items"},
-                fields=["name", "idx", "link_to"],
+                fields=["name", "idx", "label", "type", "link_type", "link_to", "child"],
                 order_by="idx asc",
             )
-            existing_links = {item.link_to for item in items}
-            missing = [item for item in desired if item["link_to"] not in existing_links]
-            if not missing:
-                continue
-            task_idx = next((int(item.idx) for item in items if item.link_to == "Task"), len(items))
-            for item in reversed(items):
-                if int(item.idx or 0) > task_idx:
-                    frappe.db.set_value(
-                        "Workspace Sidebar Item", item.name, "idx", int(item.idx) + len(missing), update_modified=False
-                    )
-            for offset, item_data in enumerate(missing, start=1):
-                child = frappe.get_doc({
-                    "doctype": "Workspace Sidebar Item",
-                    "parent": sidebar_name,
-                    "parenttype": "Workspace Sidebar",
-                    "parentfield": "items",
-                    "idx": task_idx + offset,
-                    **item_data,
-                })
-                child.insert(ignore_permissions=True)
-            updated.append({"sidebar": sidebar_name, "added": [item["label"] for item in missing]})
+            managed_targets = {row["link_to"] for row in desired_links} | {"planning", "planning-calendar"}
+            planning_sections = {
+                row.name for row in items
+                if row.type == "Section Break" and str(row.label or "").casefold() in {"planificación", "planificacion"}
+            }
+            candidates = {}
+            for row in items:
+                if row.link_to in managed_targets and row.link_to not in candidates:
+                    candidates[row.link_to] = row
+            # Core sidebar routes may vary slightly between ERPNext builds;
+            # reuse their translated Home/Dashboard entries instead of creating duplicates.
+            for row in items:
+                label = str(row.label or "").casefold()
+                if label in {"home", "inicio"} and "Projects" not in candidates:
+                    candidates["Projects"] = row
+                if label in {"dashboard", "tablero"} and "project-dashboard" not in candidates:
+                    candidates["project-dashboard"] = row
+
+            # Remove obsolete/duplicate planning links and an earlier section;
+            # they contain navigation metadata only, never business records.
+            keep_names = {row.name for row in candidates.values() if row.link_to not in {"planning", "planning-calendar"}}
+            for row in items:
+                if row.name in planning_sections or (
+                    row.link_to in managed_targets and row.name not in keep_names
+                ):
+                    frappe.delete_doc("Workspace Sidebar Item", row.name, ignore_permissions=True)
+
+            ordered_names = []
+            for idx, item_data in enumerate(desired_links, start=1):
+                row = candidates.get(item_data["link_to"])
+                if row and frappe.db.exists("Workspace Sidebar Item", row.name):
+                    name = row.name
+                else:
+                    name = frappe.get_doc({
+                        "doctype": "Workspace Sidebar Item",
+                        "parent": sidebar_name,
+                        "parenttype": "Workspace Sidebar",
+                        "parentfield": "items",
+                        "idx": idx, "type": "Link", "child": 0, **item_data,
+                    }).insert(ignore_permissions=True).name
+                frappe.db.set_value("Workspace Sidebar Item", name, {
+                    "idx": idx, "type": "Link", "child": 0, **item_data,
+                }, update_modified=False)
+                ordered_names.append(name)
+
+            section = frappe.get_doc({
+                "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
+                "parenttype": "Workspace Sidebar", "parentfield": "items",
+                "idx": 7, "label": "Planificación", "type": "Section Break",
+                "collapsible": 1, "show_arrow": 1, "keep_closed": 0,
+            }).insert(ignore_permissions=True)
+            ordered_names.append(section.name)
+            for idx, item_data in enumerate((
+                {"label": "Tabla", "link_type": "Page", "link_to": "planning", "icon": "table"},
+                {"label": "Calendario", "link_type": "Page", "link_to": "planning-calendar", "icon": "calendar"},
+            ), start=8):
+                row = frappe.get_doc({
+                    "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
+                    "parenttype": "Workspace Sidebar", "parentfield": "items",
+                    "idx": idx, "type": "Link", "child": 1, **item_data,
+                }).insert(ignore_permissions=True)
+                ordered_names.append(row.name)
+
+            remaining = [row for row in items if row.name not in ordered_names and frappe.db.exists("Workspace Sidebar Item", row.name)]
+            for idx, row in enumerate(remaining, start=10):
+                frappe.db.set_value("Workspace Sidebar Item", row.name, "idx", idx, update_modified=False)
+            updated.append({"sidebar": sidebar_name, "order": [row["label"] for row in desired_links] + ["Planificación", "Tabla", "Calendario"]})
         except Exception:
             frappe.log_error(
                 frappe.get_traceback(), f"Could not update Projects sidebar {sidebar_name}"

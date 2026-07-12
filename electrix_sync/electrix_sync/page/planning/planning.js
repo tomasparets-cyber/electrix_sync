@@ -206,7 +206,14 @@ class ElectrixPlanning {
 			{ fieldtype: "Datetime", fieldname: "ends_on", label: __("Fin"), reqd: 1, default: source.ends_on },
 			{ fieldtype: "Link", fieldname: "event_type", label: __("Tipo de evento STEL"), options: "STEL Event Type", default: source.custom_stel_event_type || "" },
 			{ fieldtype: "Select", fieldname: "event_state", label: __("Estado STEL"), options: "PENDING\nCOMPLETED\nREFUSED", default: source.custom_stel_event_state || "PENDING" },
-			{ fieldtype: "MultiSelectList", fieldname: "employees", label: __("Empleados"), default: source.assigned_employees || [], get_data: (text) => frappe.db.get_link_options("Employee", text, { status: "Active" }) },
+			{
+				fieldtype: "Table", fieldname: "employees", label: __("Empleados"),
+				data: (source.assigned_employees || []).map((employee) => ({ employee })),
+				fields: [
+					{ fieldtype: "Link", fieldname: "employee", label: __("Empleado"), options: "Employee", reqd: 1, in_list_view: 1, columns: 4 },
+					{ fieldtype: "Data", fieldname: "employee_name", label: __("Nombre"), fetch_from: "employee.employee_name", read_only: 1, in_list_view: 1, columns: 6 },
+				],
+			},
 		];
 	}
 

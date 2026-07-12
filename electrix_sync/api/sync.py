@@ -858,21 +858,9 @@ def sync_event_assignment(event, employee, calendar_id, stel_event_id):
 
 
 def build_event_description(item):
-    customer = get_customer_by_stel_id(get_first(item, "account-id"))
-    incident_task = get_task_by_stel_id(get_first(item, "incident-id"))
-    creator = get_employee_by_stel_id(get_first(item, "creator-id"))
-
-    lines = [
-        get_first(item, "description"),
-        "",
-        f"STEL event ID: {get_stel_id(item)}",
-        f"Customer: {customer or get_first(item, 'account-id') or ''}",
-        f"Incident task: {incident_task or get_first(item, 'incident-id') or ''}",
-        f"Creator: {creator or get_first(item, 'creator-id') or ''}",
-        f"Calendar ID: {get_first(item, 'calendar-id') or ''}",
-        f"Location: {get_first(item, 'location') or ''}",
-    ]
-    return "\n".join(line for line in lines if line is not None).strip()
+    # STEL relationship identifiers live in dedicated custom fields and child
+    # rows. The user-facing description must remain exactly the source text.
+    return str(get_first(item, "description") or "").strip()
 
 
 def sync_deleted_event(stel_id, item):

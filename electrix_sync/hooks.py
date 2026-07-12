@@ -10,6 +10,7 @@ app_license = "MIT"
 app_include_css = [
     "/assets/electrix_sync/css/desk.css",
     "/assets/electrix_sync/css/planning.css",
+    "/assets/electrix_sync/css/planning_calendar.css",
 ]
 
 doc_events = {
@@ -31,3 +32,9 @@ doc_events = {
 # so they must not run on this branch.
 after_install = "electrix_sync.v16_setup.ensure_staging_doctypes"
 after_migrate = "electrix_sync.v16_setup.ensure_staging_doctypes"
+
+scheduler_events = {
+    "cron": {
+        "*/5 * * * *": ["electrix_sync.api.realtime_sync.sync_event_calendars"],
+    }
+}

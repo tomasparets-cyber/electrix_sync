@@ -16,7 +16,8 @@
     "default_customer_group",
     "default_territory",
     "incremental_section",
-    "last_incremental_sync"
+    "last_incremental_sync",
+    "last_event_calendar_sync"
   ],
   "fields": [
     {
@@ -78,6 +79,12 @@
       "fieldname": "last_incremental_sync",
       "fieldtype": "Datetime",
       "label": "Última sincronización incremental",
+      "read_only": 1
+    },
+    {
+      "fieldname": "last_event_calendar_sync",
+      "fieldtype": "Datetime",
+      "label": "Última sincronización automática de calendarios",
       "read_only": 1
     }
   ],

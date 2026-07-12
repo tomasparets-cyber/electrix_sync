@@ -165,6 +165,7 @@ def repair_calendar_assignments(refresh=False):
                 "custom_planning_status": planning_status,
                 "starts_on": normalize_datetime(starts_on),
                 "ends_on": normalize_datetime(ends_on),
+                "description": str(source.get("description") or "").strip(),
             },
             update_modified=False,
         )
@@ -437,7 +438,7 @@ def parse_employees(value):
     if isinstance(value, str):
         value = frappe.parse_json(value)
     normalized = [
-        item.get("value") if isinstance(item, dict) else item
+        (item.get("employee") or item.get("value")) if isinstance(item, dict) else item
         for item in (value or [])
     ]
     return list(dict.fromkeys(item for item in normalized if item))
