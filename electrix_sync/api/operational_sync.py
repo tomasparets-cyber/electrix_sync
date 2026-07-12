@@ -39,12 +39,13 @@ def run_operational_import():
     calendars = [row["data"] for row in get_staged("calendars")]
     state_names = get_catalog_names([row["data"] for row in get_staged("incident_states")])
     type_names = get_catalog_names([row["data"] for row in get_staged("incident_types")])
+    event_type_names = import_event_types(get_staged("event_types"))
     summary = {resource: blank_counts() for resource in OPERATIONAL_RESOURCES}
 
     processors = {
         "employees": lambda data: sync_employee(data, settings, calendars),
         "incidents": lambda data: sync_incident(data, state_names, type_names),
-        "events": sync_event,
+        "events": lambda data: sync_event(data, event_type_names),
     }
     previous_flag = getattr(frappe.flags, "in_stel_sync", False)
     frappe.flags.in_stel_sync = True
@@ -76,3 +77,27 @@ def run_operational_import():
 
 def blank_counts():
     return {"created": 0, "updated": 0, "skipped": 0, "unchanged": 0, "error": 0}
+
+
+def import_event_types(rows):
+    names = {}
+    for row in rows:
+        data = row["data"]
+        stel_id = str(data.get("id") or row["remote_id"])
+        event_type_name = str(data.get("name") or f"STEL {stel_id}").strip()
+        names[stel_id] = event_type_name
+        values = {
+            "event_type_name": event_type_name,
+            "color": data.get("color"),
+            "disabled": 1 if data.get("deleted") is True else 0,
+        }
+        if frappe.db.exists("STEL Event Type", stel_id):
+            frappe.db.set_value("STEL Event Type", stel_id, values, update_modified=False)
+        else:
+            frappe.get_doc({
+                "doctype": "STEL Event Type",
+                "stel_id": stel_id,
+                **values,
+            }).insert(ignore_permissions=True)
+    frappe.db.commit()
+    return names

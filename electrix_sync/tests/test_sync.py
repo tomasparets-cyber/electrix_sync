@@ -1,5 +1,6 @@
 from electrix_sync.api.sync import (
     get_catalog_names,
+    get_event_status,
     get_incident_account_id,
     get_incident_address_id,
     get_incident_assignee_id,
@@ -9,6 +10,7 @@ from electrix_sync.api.sync import (
     get_incident_type_id,
     get_issue_priority,
     get_issue_status,
+    get_stel_event_state,
     get_task_priority,
     get_task_status,
     match_employee_calendar,
@@ -93,3 +95,12 @@ def test_employee_calendar_matching_supports_hyphenated_owner_id():
     calendars = [{"id": 99, "owner-id": 42, "name": "Personal"}]
 
     assert match_employee_calendar({"id": 42, "name": "Cati Coll"}, calendars) == "99"
+
+
+def test_event_states_preserve_stel_vocabulary():
+    assert get_stel_event_state({"event-state": "PENDING"}) == "PENDING"
+    assert get_stel_event_state({"eventState": "COMPLETED"}) == "COMPLETED"
+    assert get_stel_event_state({"state": "REFUSED"}) == "REFUSED"
+    assert get_event_status({"event-state": "PENDING"}) == "Open"
+    assert get_event_status({"event-state": "COMPLETED"}) == "Closed"
+    assert get_event_status({"event-state": "REFUSED"}) == "Cancelled"

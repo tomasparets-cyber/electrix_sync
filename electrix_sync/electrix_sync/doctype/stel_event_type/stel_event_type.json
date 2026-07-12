@@ -1,0 +1,34 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:stel_id",
+ "creation": "2026-07-12 08:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["stel_id", "event_type_name", "color", "disabled"],
+ "fields": [
+  {"fieldname": "stel_id", "fieldtype": "Data", "in_list_view": 1, "label": "STEL ID", "read_only": 1, "required": 1, "unique": 1},
+  {"fieldname": "event_type_name", "fieldtype": "Data", "in_list_view": 1, "label": "Tipo de evento", "required": 1},
+  {"fieldname": "color", "fieldtype": "Color", "label": "Color"},
+  {"default": "0", "fieldname": "disabled", "fieldtype": "Check", "in_list_view": 1, "label": "Desactivado"}
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-12 08:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Electrix Sync",
+ "name": "STEL Event Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"read": 1, "report": 1, "role": "Projects Manager"},
+  {"read": 1, "report": 1, "role": "Projects User"}
+ ],
+ "quick_entry": 0,
+ "show_title_field_in_link": 1,
+ "sort_field": "event_type_name",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "event_type_name"
+}

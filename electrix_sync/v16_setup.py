@@ -13,6 +13,7 @@ def ensure_staging_doctypes():
         "stel_raw_record",
         "lugar_stel_link",
         "lugar",
+        "stel_event_type",
     ):
         frappe.reload_doc("electrix_sync", "doctype", doctype_name, force=True)
 
@@ -106,7 +107,10 @@ def ensure_master_data_fields():
         ],
         "Event": [
             {**common[0], "insert_after": "subject"},
-            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_stel_event_type", "label": "Tipo de evento STEL", "fieldtype": "Link", "options": "STEL Event Type", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_stel_event_type_name", "label": "Nombre del tipo STEL", "fieldtype": "Data", "fetch_from": "custom_stel_event_type.event_type_name", "read_only": 1, "insert_after": "custom_stel_event_type"},
+            {"fieldname": "custom_stel_event_state", "label": "Estado STEL", "fieldtype": "Select", "options": "PENDING\nCOMPLETED\nREFUSED", "default": "PENDING", "insert_after": "custom_stel_event_type_name"},
+            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_event_state"},
             {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_assigned_employee"},
             {"fieldname": "custom_planning_status", "label": "Estado de planificación", "fieldtype": "Select", "options": "Unplanned\nPlanned\nCompleted", "default": "Unplanned", "insert_after": "custom_stel_calendar_id"},
             {"fieldname": "custom_estimated_duration", "label": "Duración estimada (horas)", "fieldtype": "Float", "default": "1", "insert_after": "custom_planning_status"},

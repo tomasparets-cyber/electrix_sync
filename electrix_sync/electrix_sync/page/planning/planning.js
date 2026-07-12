@@ -104,9 +104,10 @@ class ElectrixPlanning {
 
 	eventCard(event, backlog) {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
+		const metadata = [event.custom_stel_event_type_name, event.custom_stel_event_state || "PENDING"].filter(Boolean).join(" · ");
 		return `<article class="planning-event ${backlog ? "is-backlog" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
 			<strong>${this.escape(event.subject || event.name)}</strong>
-			<span>${backlog ? __("Pendiente") : this.timeLabel(event.starts_on, event.ends_on)}</span>
+			<span>${this.escape(metadata)}${backlog ? "" : ` · ${this.timeLabel(event.starts_on, event.ends_on)}`}</span>
 			<small>${duration}h</small>
 		</article>`;
 	}

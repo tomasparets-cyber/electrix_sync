@@ -20,6 +20,7 @@ doc_events = {
         "on_update": "electrix_sync.api.outbound_sync.enqueue_task",
     },
     "Event": {
+        "validate": "electrix_sync.api.outbound_sync.normalize_event",
         "on_update": "electrix_sync.api.outbound_sync.enqueue_event",
     },
 }

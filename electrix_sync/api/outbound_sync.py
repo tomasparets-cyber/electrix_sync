@@ -15,6 +15,15 @@ def enqueue_event(doc, method=None):
     enqueue_document("Event", doc)
 
 
+def normalize_event(doc, method=None):
+    state = str(doc.get("custom_stel_event_state") or "PENDING").upper()
+    doc.custom_stel_event_state = state if state in {"PENDING", "COMPLETED", "REFUSED"} else "PENDING"
+    doc.status = {"PENDING": "Open", "COMPLETED": "Closed", "REFUSED": "Cancelled"}[doc.custom_stel_event_state]
+    doc.custom_planning_status = "Completed" if doc.custom_stel_event_state == "COMPLETED" else (
+        "Planned" if doc.get("custom_assigned_employee") and doc.starts_on else "Unplanned"
+    )
+
+
 def enqueue_document(doctype, doc):
     if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
         return
@@ -85,6 +94,9 @@ def push_event(doc):
         "all-day": bool(doc.all_day),
         "event-state": erp_event_state(doc),
     }
+    event_type_id = doc.get("custom_stel_event_type")
+    if event_type_id:
+        payload["event-type-id"] = int(event_type_id)
     calendar_id = doc.get("custom_stel_calendar_id")
     if calendar_id and not doc.get("custom_stel_id"):
         payload["calendar-id"] = int(calendar_id)

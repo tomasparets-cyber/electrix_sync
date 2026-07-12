@@ -12,7 +12,18 @@ from electrix_sync.api.stel import StelClient
 
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "config" / "stel_bulk_endpoints.json"
-ESSENTIAL_RESOURCES = {"addresses", "clients", "contacts", "employees", "events", "incidents"}
+ESSENTIAL_RESOURCES = {
+    "addresses",
+    "calendars",
+    "clients",
+    "contacts",
+    "employees",
+    "event_types",
+    "events",
+    "incident_states",
+    "incident_types",
+    "incidents",
+}
 
 
 def get_manifest():

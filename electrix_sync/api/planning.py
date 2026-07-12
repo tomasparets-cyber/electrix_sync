@@ -7,7 +7,13 @@ from frappe.utils import add_days, get_datetime, get_system_timezone, nowdate
 
 from electrix_sync.api.master_data import get_staged
 from electrix_sync.api.stel import StelClient
-from electrix_sync.api.sync import get_stel_id, match_employee_calendar
+from electrix_sync.api.sync import (
+    ensure_stel_event_type,
+    get_catalog_names,
+    get_stel_event_state,
+    get_stel_id,
+    match_employee_calendar,
+)
 
 
 @frappe.whitelist()
@@ -31,6 +37,9 @@ def get_board(start_date=None, days=7):
         "ends_on",
         "status",
         "custom_stel_id",
+        "custom_stel_event_type",
+        "custom_stel_event_type_name",
+        "custom_stel_event_state",
         "custom_stel_calendar_id",
         "custom_assigned_employee",
         "custom_planning_status",
@@ -95,6 +104,7 @@ def repair_calendar_assignments():
         mapped_employees += 1
 
     staged_events = [row["data"] for row in get_staged("events")]
+    event_type_names = get_catalog_names([row["data"] for row in get_staged("event_types")])
     stel_events = {str(get_stel_id(row)): row for row in staged_events if get_stel_id(row)}
     erp_events = frappe.get_all(
         "Event",
@@ -112,6 +122,10 @@ def repair_calendar_assignments():
         starts_on = source.get("startDate") or source.get("start-date") or event.starts_on
         ends_on = source.get("endDate") or source.get("end-date") or event.ends_on
         state = str(source.get("state") or source.get("event-state") or "").upper()
+        event_type_id = source.get("eventTypeId") or source.get("event-type-id")
+        if event_type_id:
+            event_type_id = str(event_type_id)
+            ensure_stel_event_type(event_type_id, event_type_names.get(event_type_id))
         planning_status = "Completed" if state == "COMPLETED" else (
             "Planned" if employee and starts_on and ends_on else "Unplanned"
         )
@@ -120,6 +134,8 @@ def repair_calendar_assignments():
             event.name,
             {
                 "custom_stel_calendar_id": str(calendar_id) if calendar_id else None,
+                "custom_stel_event_type": event_type_id,
+                "custom_stel_event_state": get_stel_event_state(source),
                 "custom_assigned_employee": employee,
                 "custom_planning_status": planning_status,
             },
@@ -253,4 +269,9 @@ def stel_datetime(value):
 
 
 def erp_event_state(event):
+    state = str(event.get("custom_stel_event_state") or "").upper()
+    if state in {"PENDING", "COMPLETED", "REFUSED"}:
+        return state
+    if event.get("status") == "Cancelled":
+        return "REFUSED"
     return "COMPLETED" if event.get("status") == "Closed" else "PENDING"

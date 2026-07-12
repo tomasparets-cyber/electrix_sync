@@ -30,9 +30,13 @@ def test_source_modified_is_naive_utc_for_mariadb():
 def test_incremental_manifest_only_contains_operational_resources():
     assert {row["key"] for row in get_run_manifest("Incremental")} == {
         "addresses",
+        "calendars",
         "clients",
         "contacts",
         "employees",
+        "event_types",
         "events",
+        "incident_states",
+        "incident_types",
         "incidents",
     }

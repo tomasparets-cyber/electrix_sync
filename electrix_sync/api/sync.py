@@ -399,7 +399,7 @@ def sync_incident(item, state_names=None, type_names=None):
         return "error"
 
 
-def sync_event(item):
+def sync_event(item, event_type_names=None):
     stel_id = get_stel_id(item)
     if not stel_id:
         log_sync("Event", "Skipped", None, message="Missing STEL ID", payload=item)
@@ -422,6 +422,14 @@ def sync_event(item):
             doc.status = get_event_status(item)
         doc.description = build_event_description(item)
         doc.custom_stel_id = stel_id
+        event_type_id = get_first(item, "event-type-id", "eventTypeId")
+        if event_type_id and has_field(doc, "custom_stel_event_type"):
+            event_type_id = str(event_type_id)
+            ensure_stel_event_type(event_type_id, (event_type_names or {}).get(event_type_id))
+            doc.custom_stel_event_type = event_type_id
+        stel_state = get_stel_event_state(item)
+        if has_field(doc, "custom_stel_event_state"):
+            doc.custom_stel_event_state = stel_state
         calendar_id = get_first(item, "calendar-id", "calendarId")
         employee = get_employee_by_stel_calendar_id(calendar_id)
         if has_field(doc, "custom_stel_calendar_id"):
@@ -429,7 +437,7 @@ def sync_event(item):
         if has_field(doc, "custom_assigned_employee"):
             doc.custom_assigned_employee = employee
         if has_field(doc, "custom_planning_status"):
-            doc.custom_planning_status = "Completed" if get_event_status(item) == "Closed" else (
+            doc.custom_planning_status = "Completed" if stel_state == "COMPLETED" else (
                 "Planned" if employee else "Unplanned"
             )
         if has_field(doc, "custom_estimated_duration"):
@@ -799,12 +807,29 @@ def get_issue_priority(item):
 
 
 def get_event_status(item):
-    state = (get_first(item, "event-state", "eventState", "state") or "").strip().upper()
-    if state in {"CANCELLED", "CANCELED"}:
+    state = get_stel_event_state(item)
+    if state == "REFUSED":
         return "Cancelled"
-    if state in {"CLOSED", "DONE", "COMPLETED"}:
+    if state == "COMPLETED":
         return "Closed"
     return "Open"
+
+
+def get_stel_event_state(item):
+    state = str(get_first(item, "event-state", "eventState", "state") or "PENDING").strip().upper()
+    aliases = {"CANCELLED": "REFUSED", "CANCELED": "REFUSED", "CLOSED": "COMPLETED", "DONE": "COMPLETED", "OPEN": "PENDING"}
+    return aliases.get(state, state if state in {"PENDING", "COMPLETED", "REFUSED"} else "PENDING")
+
+
+def ensure_stel_event_type(stel_id, event_type_name=None):
+    if frappe.db.exists("STEL Event Type", stel_id):
+        return stel_id
+    frappe.get_doc({
+        "doctype": "STEL Event Type",
+        "stel_id": stel_id,
+        "event_type_name": event_type_name or f"STEL {stel_id}",
+    }).insert(ignore_permissions=True)
+    return stel_id
 
 
 def build_event_description(item):
