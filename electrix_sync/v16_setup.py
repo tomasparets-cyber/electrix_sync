@@ -187,7 +187,8 @@ def add_projects_sidebar_items():
             managed_targets = {row["link_to"] for row in desired_links} | {"planning", "planning-calendar"}
             planning_sections = {
                 row.name for row in items
-                if row.type == "Section Break" and str(row.label or "").casefold() in {"planificación", "planificacion"}
+                if row.type in {"Section Break", "Sidebar Item Group"}
+                and str(row.label or "").casefold() in {"planificación", "planificacion"}
             }
             candidates = {}
             for row in items:
@@ -233,7 +234,7 @@ def add_projects_sidebar_items():
                 "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                 "parenttype": "Workspace Sidebar", "parentfield": "items",
                 "idx": 7, "label": "Planificación", "type": "Section Break",
-                "collapsible": 1, "show_arrow": 1, "keep_closed": 0,
+                "collapsible": 1, "indent": 0, "show_arrow": 0, "keep_closed": 0,
             }).insert(ignore_permissions=True)
             ordered_names.append(section.name)
             for idx, item_data in enumerate((
