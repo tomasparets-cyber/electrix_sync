@@ -86,18 +86,5 @@ def import_event_types(rows):
         stel_id = str(data.get("id") or row["remote_id"])
         event_type_name = str(data.get("name") or f"STEL {stel_id}").strip()
         names[stel_id] = event_type_name
-        values = {
-            "event_type_name": event_type_name,
-            "color": data.get("color"),
-            "disabled": 1 if data.get("deleted") is True else 0,
-        }
-        if frappe.db.exists("STEL Event Type", stel_id):
-            frappe.db.set_value("STEL Event Type", stel_id, values, update_modified=False)
-        else:
-            frappe.get_doc({
-                "doctype": "STEL Event Type",
-                "stel_id": stel_id,
-                **values,
-            }).insert(ignore_permissions=True)
     frappe.db.commit()
     return names

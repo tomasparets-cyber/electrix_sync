@@ -8,11 +8,11 @@ from frappe.utils import add_days, get_datetime, get_system_timezone, nowdate
 from electrix_sync.api.master_data import get_staged
 from electrix_sync.api.stel import StelClient
 from electrix_sync.api.sync import (
-    ensure_stel_event_type,
     get_catalog_names,
-    get_stel_event_state,
+    get_event_status,
     get_stel_id,
     match_employee_calendar,
+    normalize_event_category,
     normalize_datetime,
 )
 
@@ -38,14 +38,16 @@ def get_board(start_date=None, days=7):
         "ends_on",
         "status",
         "custom_stel_id",
-        "custom_stel_event_type",
-        "custom_stel_event_type_name",
-        "custom_stel_event_state",
         "custom_stel_calendar_id",
         "custom_assigned_employee",
         "custom_planning_status",
         "custom_estimated_duration",
     ]
+    if frappe.get_meta("Event").has_field("event_category"):
+        fields.append("event_category")
+    for fieldname in ("location", "reference_doctype", "reference_docname"):
+        if frappe.get_meta("Event").has_field(fieldname):
+            fields.append(fieldname)
     planned = frappe.get_all(
         "Event",
         filters={"starts_on": ["between", [str(start_date), str(end_date)]]},
@@ -55,7 +57,7 @@ def get_board(start_date=None, days=7):
     )
     unplanned = frappe.get_all(
         "Event",
-        filters={"custom_planning_status": "Unplanned", "status": ["!=", "Closed"]},
+        filters={"custom_planning_status": "Unplanned", "status": ["not in", ["Closed", "Cancelled"]]},
         fields=fields,
         order_by="modified desc",
         limit_page_length=500,
@@ -146,12 +148,11 @@ def repair_calendar_assignments(refresh=False):
         employee = employee_by_calendar.get(str(calendar_id)) if calendar_id else None
         starts_on = source.get("startDate") or source.get("start-date") or event.starts_on
         ends_on = source.get("endDate") or source.get("end-date") or event.ends_on
-        state = str(source.get("state") or source.get("event-state") or "").upper()
+        event_status = get_event_status(source)
         event_type_id = source.get("eventTypeId") or source.get("event-type-id")
-        if event_type_id:
-            event_type_id = str(event_type_id)
-            ensure_stel_event_type(event_type_id, event_type_names.get(event_type_id))
-        planning_status = "Completed" if state == "COMPLETED" else (
+        event_category = event_type_names.get(str(event_type_id)) if event_type_id else None
+        event_category = normalize_event_category(event_category) if event_category else None
+        planning_status = "Completed" if event_status == "Closed" else (
             "Planned" if employee and starts_on and ends_on else "Unplanned"
         )
         frappe.db.set_value(
@@ -159,10 +160,10 @@ def repair_calendar_assignments(refresh=False):
             event.name,
             {
                 "custom_stel_calendar_id": str(calendar_id) if calendar_id else None,
-                "custom_stel_event_type": event_type_id,
-                "custom_stel_event_state": get_stel_event_state(source),
                 "custom_assigned_employee": employee,
                 "custom_planning_status": planning_status,
+                "status": event_status,
+                **({"event_category": event_category} if frappe.get_meta("Event").has_field("event_category") else {}),
                 "starts_on": normalize_datetime(starts_on),
                 "ends_on": normalize_datetime(ends_on),
                 "description": str(source.get("description") or "").strip(),
@@ -235,7 +236,7 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
 
 
 @frappe.whitelist()
-def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_type=None, event_state="PENDING", employees=None):
+def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employees=None):
     employee_names = parse_employees(employees) or [employee]
     employee_docs = [frappe.get_doc("Employee", name) for name in employee_names]
     missing = [row.employee_name for row in employee_docs if not row.get("custom_stel_calendar_id")]
@@ -251,9 +252,12 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
     event.starts_on = starts_on
     event.ends_on = ends_on
     event.event_type = "Private"
+    event.status = normalize_event_status(status)
+    if event.meta.has_field("event_category"):
+        event.event_category = event_category or None
+    if event.meta.has_field("location"):
+        event.location = location or None
     event.custom_assigned_employee = employee_names[0]
-    event.custom_stel_event_type = event_type or None
-    event.custom_stel_event_state = event_state or "PENDING"
     event.custom_planning_status = "Planned"
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     event.flags.skip_stel_outbound = True
@@ -273,7 +277,7 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
 
 
 @frappe.whitelist()
-def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_type=None, event_state="PENDING", employees=None):
+def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employees=None):
     event = frappe.get_doc("Event", event_name)
     event.check_permission("write")
     starts_on = get_datetime(starts_on)
@@ -284,8 +288,11 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
     event.description = description
     event.starts_on = starts_on
     event.ends_on = ends_on
-    event.custom_stel_event_type = event_type or None
-    event.custom_stel_event_state = event_state or "PENDING"
+    event.status = normalize_event_status(status)
+    if event.meta.has_field("event_category"):
+        event.event_category = event_category or None
+    if event.meta.has_field("location"):
+        event.location = location or None
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     ensure_legacy_assignment(event)
     if employees is not None:
@@ -365,6 +372,10 @@ def replace_stel_event(event, calendar_id, starts_on, ends_on):
         "calendar-id": int(calendar_id),
         "event-state": erp_event_state(event),
     }
+    event_type_id = get_catalog_id("event_types", event.get("event_category"))
+    if event_type_id:
+        payload["event-type-id"] = int(event_type_id)
+    add_standard_event_relations(event, payload)
     created = client.create_event(payload)
     new_id = extract_stel_id(created)
     if not new_id:
@@ -390,8 +401,10 @@ def create_stel_event(event, calendar_id, starts_on, ends_on):
         "calendar-id": int(calendar_id),
         "event-state": erp_event_state(event),
     }
-    if event.get("custom_stel_event_type"):
-        payload["event-type-id"] = int(event.custom_stel_event_type)
+    event_type_id = get_catalog_id("event_types", event.get("event_category"))
+    if event_type_id:
+        payload["event-type-id"] = int(event_type_id)
+    add_standard_event_relations(event, payload)
     created = StelClient().create_event(payload)
     new_id = extract_stel_id(created)
     if not new_id:
@@ -408,8 +421,10 @@ def update_stel_event_copy(event, stel_event_id, starts_on, ends_on):
         "all-day": bool(event.get("all_day")),
         "event-state": erp_event_state(event),
     }
-    if event.get("custom_stel_event_type"):
-        payload["event-type-id"] = int(event.custom_stel_event_type)
+    event_type_id = get_catalog_id("event_types", event.get("event_category"))
+    if event_type_id:
+        payload["event-type-id"] = int(event_type_id)
+    add_standard_event_relations(event, payload)
     StelClient().update_event(stel_event_id, payload)
 
 
@@ -505,9 +520,40 @@ def stel_datetime(value):
 
 
 def erp_event_state(event):
-    state = str(event.get("custom_stel_event_state") or "").upper()
-    if state in {"PENDING", "COMPLETED", "REFUSED"}:
-        return state
     if event.get("status") == "Cancelled":
         return "REFUSED"
     return "COMPLETED" if event.get("status") == "Closed" else "PENDING"
+
+
+def normalize_event_status(status):
+    status = str(status or "Open")
+    aliases = {"PENDING": "Open", "COMPLETED": "Closed", "REFUSED": "Cancelled"}
+    return aliases.get(status.upper(), status if status in {"Open", "Closed", "Cancelled"} else "Open")
+
+
+def get_catalog_id(resource_type, name):
+    target = str(name or "").strip().casefold()
+    if not target:
+        return None
+    aliases = {
+        "event": {"event", "evento", "visita"},
+        "meeting": {"meeting", "reunión", "reunion"},
+        "call": {"call", "llamada"},
+        "sent/received email": {"email", "correo", "mail", "sent/received email"},
+        "other": {"other", "otro"},
+    }
+    candidates = aliases.get(target, {target})
+    for row in get_staged(resource_type):
+        source_name = str(row["data"].get("name") or "").strip().casefold()
+        if source_name in candidates:
+            return row["remote_id"]
+    return None
+
+
+def add_standard_event_relations(event, payload):
+    if event.meta.has_field("location") and event.get("location"):
+        payload["location"] = str(event.location)[:128]
+    if event.get("reference_doctype") == "Customer" and event.get("reference_docname"):
+        account_id = frappe.db.get_value("Customer", event.reference_docname, "custom_stel_id")
+        if account_id:
+            payload["account-id"] = int(account_id)

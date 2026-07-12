@@ -114,7 +114,7 @@ class ElectrixPlanning {
 
 	eventCard(event, backlog) {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
-		const metadata = [event.custom_stel_event_type_name, event.custom_stel_event_state || "PENDING"].filter(Boolean).join(" · ");
+		const metadata = [event.event_category, event.status || "Open"].filter(Boolean).join(" · ");
 		return `<article class="planning-event ${backlog ? "is-backlog" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
 			<strong>${this.escape(event.subject || event.name)}</strong>
 			<span>${this.escape(metadata)}${backlog ? "" : ` · ${this.timeLabel(event.starts_on, event.ends_on)}`}</span>
@@ -157,7 +157,7 @@ class ElectrixPlanning {
 		const endsOn = `${cell.dataset.date} 09:00:00`;
 		const dialog = new frappe.ui.Dialog({
 			title: __("Nuevo evento"),
-			fields: this.eventFields({ starts_on: startsOn, ends_on: endsOn, custom_stel_event_state: "PENDING", assigned_employees: [cell.dataset.employee] }),
+			fields: this.eventFields({ starts_on: startsOn, ends_on: endsOn, status: "Open", assigned_employees: [cell.dataset.employee] }),
 			primary_action_label: __("Crear y planificar"),
 			primary_action: async (values) => {
 				await frappe.call({
@@ -202,10 +202,11 @@ class ElectrixPlanning {
 		return [
 			{ fieldtype: "Data", fieldname: "subject", label: __("Asunto"), reqd: 1, default: source.subject || "" },
 			{ fieldtype: "Small Text", fieldname: "description", label: __("Descripción"), default: source.description || "" },
+			{ fieldtype: "Data", fieldname: "location", label: __("Ubicación"), default: source.location || "" },
 			{ fieldtype: "Datetime", fieldname: "starts_on", label: __("Inicio"), reqd: 1, default: source.starts_on },
 			{ fieldtype: "Datetime", fieldname: "ends_on", label: __("Fin"), reqd: 1, default: source.ends_on },
-			{ fieldtype: "Link", fieldname: "event_type", label: __("Tipo de evento STEL"), options: "STEL Event Type", default: source.custom_stel_event_type || "" },
-			{ fieldtype: "Select", fieldname: "event_state", label: __("Estado STEL"), options: "PENDING\nCOMPLETED\nREFUSED", default: source.custom_stel_event_state || "PENDING" },
+			{ fieldtype: "Select", fieldname: "event_category", label: __("Categoría"), options: "Event\nMeeting\nCall\nSent/Received Email\nOther", default: source.event_category || "Event" },
+			{ fieldtype: "Select", fieldname: "status", label: __("Estado"), options: "Open\nClosed\nCancelled", default: source.status || "Open" },
 			{
 				fieldtype: "Table", fieldname: "employees", label: __("Empleados"),
 				data: (source.assigned_employees || []).map((employee) => ({ employee })),

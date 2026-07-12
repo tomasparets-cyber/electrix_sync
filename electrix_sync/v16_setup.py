@@ -21,6 +21,8 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
+    migrate_standard_status_and_type_fields()
+    remove_redundant_functional_fields()
     add_projects_workspace_shortcuts()
     add_projects_sidebar_items()
 
@@ -85,11 +87,7 @@ def ensure_master_data_fields():
         "Task": [
             {**common[0], "insert_after": "subject"},
             {"fieldname": "custom_stel_reference", "label": "STEL Incident Reference", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_id"},
-            {"fieldname": "custom_stel_address_id", "label": "STEL Address ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_reference"},
-            {"fieldname": "custom_stel_assignee_id", "label": "STEL Assignee ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_address_id"},
-            {"fieldname": "custom_stel_state_id", "label": "STEL State ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_assignee_id"},
-            {"fieldname": "custom_stel_type_id", "label": "STEL Type ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_state_id"},
-            {**common[1], "insert_after": "custom_stel_type_id"},
+            {**common[1], "insert_after": "custom_stel_reference"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
             {**common[3], "insert_after": "custom_stel_payload_hash"},
             {**common[4], "insert_after": "custom_stel_last_sync"},
@@ -97,21 +95,14 @@ def ensure_master_data_fields():
         "Issue": [
             {**common[0], "insert_after": "subject"},
             {"fieldname": "custom_stel_reference", "label": "STEL Incident Reference", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_id"},
-            {"fieldname": "custom_stel_address_id", "label": "STEL Address ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_reference"},
-            {"fieldname": "custom_stel_assignee_id", "label": "STEL Assignee ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_address_id"},
-            {"fieldname": "custom_stel_state_id", "label": "STEL State ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_assignee_id"},
-            {"fieldname": "custom_stel_type_id", "label": "STEL Type ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_state_id"},
-            {**common[1], "insert_after": "custom_stel_type_id"},
+            {**common[1], "insert_after": "custom_stel_reference"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
             {**common[3], "insert_after": "custom_stel_payload_hash"},
             {**common[4], "insert_after": "custom_stel_last_sync"},
         ],
         "Event": [
             {**common[0], "insert_after": "subject"},
-            {"fieldname": "custom_stel_event_type", "label": "Tipo de evento STEL", "fieldtype": "Link", "options": "STEL Event Type", "insert_after": "custom_stel_id"},
-            {"fieldname": "custom_stel_event_type_name", "label": "Nombre del tipo STEL", "fieldtype": "Data", "fetch_from": "custom_stel_event_type.event_type_name", "read_only": 1, "insert_after": "custom_stel_event_type"},
-            {"fieldname": "custom_stel_event_state", "label": "Estado STEL", "fieldtype": "Select", "options": "PENDING\nCOMPLETED\nREFUSED", "default": "PENDING", "insert_after": "custom_stel_event_type_name"},
-            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_event_state"},
+            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_id"},
             {"fieldname": "custom_stel_assignments", "label": "Empleados y calendarios STEL", "fieldtype": "Table", "options": "STEL Event Assignment", "insert_after": "custom_assigned_employee"},
             {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_assignments"},
             {"fieldname": "custom_planning_status", "label": "Estado de planificación", "fieldtype": "Select", "options": "Unplanned\nPlanned\nCompleted", "default": "Unplanned", "insert_after": "custom_stel_calendar_id"},
@@ -129,6 +120,58 @@ def ensure_master_data_fields():
     for doctype in available:
         frappe.clear_cache(doctype=doctype)
         frappe.db.updatedb(doctype)
+
+
+def migrate_standard_status_and_type_fields():
+    """Move earlier mirrored STEL values into standard ERPNext fields."""
+    from electrix_sync.api.sync import normalize_event_category
+
+    event_meta = frappe.get_meta("Event") if frappe.db.exists("DocType", "Event") else None
+    if not event_meta:
+        return
+    legacy_fields = {field.fieldname for field in event_meta.fields}
+    query_fields = ["name", "status"]
+    if "custom_stel_event_state" in legacy_fields:
+        query_fields.append("custom_stel_event_state")
+    if "custom_stel_event_type" in legacy_fields:
+        query_fields.append("custom_stel_event_type")
+    for event in frappe.get_all("Event", fields=query_fields, limit_page_length=0):
+        values = {}
+        legacy_state = str(event.get("custom_stel_event_state") or "").upper()
+        if legacy_state:
+            values["status"] = {"PENDING": "Open", "COMPLETED": "Closed", "REFUSED": "Cancelled"}.get(
+                legacy_state, event.status or "Open"
+            )
+        type_id = event.get("custom_stel_event_type")
+        if type_id and event_meta.has_field("event_category"):
+            category = frappe.db.get_value("STEL Event Type", str(type_id), "event_type_name")
+            if category:
+                values["event_category"] = normalize_event_category(category)
+        if values:
+            frappe.db.set_value("Event", event.name, values, update_modified=False)
+
+
+def remove_redundant_functional_fields():
+    """Remove UI fields that duplicated standard Task/Event status and type fields."""
+    redundant = (
+        ("Task", "custom_stel_state_id"),
+        ("Task", "custom_stel_type_id"),
+        ("Task", "custom_stel_assignee_id"),
+        ("Task", "custom_stel_address_id"),
+        ("Issue", "custom_stel_state_id"),
+        ("Issue", "custom_stel_type_id"),
+        ("Issue", "custom_stel_assignee_id"),
+        ("Issue", "custom_stel_address_id"),
+        ("Event", "custom_stel_event_state"),
+        ("Event", "custom_stel_event_type"),
+        ("Event", "custom_stel_event_type_name"),
+    )
+    for doctype, fieldname in redundant:
+        name = frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname}, "name")
+        if name:
+            frappe.delete_doc("Custom Field", name, ignore_permissions=True, force=True)
+    for doctype in {row[0] for row in redundant}:
+        frappe.clear_cache(doctype=doctype)
 
 
 def add_projects_workspace_shortcuts():

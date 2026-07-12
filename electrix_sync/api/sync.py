@@ -366,6 +366,8 @@ def sync_incident(item, state_names=None, type_names=None):
             )
         if has_field(doc, "exp_end_date"):
             doc.exp_end_date = normalize_date(get_first(item, "closing-date", "closingDate"))
+        if has_field(doc, "expected_time") and get_first(item, "length") is not None:
+            doc.expected_time = float(get_first(item, "length") or 0) / 60
         doc.description = get_incident_description(item)
         doc.custom_stel_id = stel_id
         if has_field(doc, "custom_stel_reference"):
@@ -426,16 +428,20 @@ def sync_event(item, event_type_names=None):
         if has_field(doc, "status"):
             doc.status = get_event_status(item)
         doc.description = build_event_description(item)
+        if has_field(doc, "location"):
+            doc.location = get_first(item, "location") or None
+        customer = get_customer_by_stel_id(get_first(item, "account-id", "accountId"))
+        if customer and has_field(doc, "reference_doctype") and has_field(doc, "reference_docname"):
+            doc.reference_doctype = "Customer"
+            doc.reference_docname = customer
         if not is_secondary:
             doc.custom_stel_id = stel_id
         event_type_id = get_first(item, "event-type-id", "eventTypeId")
-        if event_type_id and has_field(doc, "custom_stel_event_type"):
-            event_type_id = str(event_type_id)
-            ensure_stel_event_type(event_type_id, (event_type_names or {}).get(event_type_id))
-            doc.custom_stel_event_type = event_type_id
+        if event_type_id and has_field(doc, "event_category"):
+            event_type_name = (event_type_names or {}).get(str(event_type_id))
+            if event_type_name:
+                doc.event_category = normalize_event_category(event_type_name)
         stel_state = get_stel_event_state(item)
-        if has_field(doc, "custom_stel_event_state"):
-            doc.custom_stel_event_state = stel_state
         calendar_id = get_first(item, "calendar-id", "calendarId")
         employee = get_employee_by_stel_calendar_id(calendar_id)
         if has_field(doc, "custom_stel_calendar_id") and not is_secondary:
@@ -701,11 +707,7 @@ def sync_issue_from_incident(item, stel_id, state_name=None, type_name=None):
     custom_values = {
         "custom_stel_id": stel_id,
         "custom_stel_reference": get_incident_reference(item),
-        "custom_stel_address_id": get_incident_address_id(item),
-        "custom_stel_assignee_id": get_incident_assignee_id(item),
         "custom_stel_creator_id": get_first(item, "creator-id", "creatorId"),
-        "custom_stel_state_id": get_incident_state_id(item),
-        "custom_stel_type_id": get_incident_type_id(item),
         "custom_stel_external_id": get_first(item, "external-id", "externalId"),
         "custom_stel_phone": get_first(item, "phone"),
         "custom_stel_duration_minutes": get_first(item, "length"),
@@ -788,9 +790,11 @@ def get_task_status(item, state_name=None):
     if item.get("deleted") is True:
         return "Cancelled"
     state = get_state_key(state_name)
-    if state == "resuelta" or get_first(item, "closing-date", "closingDate", "resolution"):
+    if state in {"resuelta", "resolved", "completed", "cerrada", "closed"} or get_first(item, "closing-date", "closingDate", "resolution"):
         return "Completed"
-    if state == "atendida":
+    if state in {"rechazada", "refused", "cancelled", "cancelada"}:
+        return "Cancelled"
+    if state in {"atendida", "working", "in progress", "en curso"}:
         return "Working"
     return "Open"
 
@@ -822,6 +826,23 @@ def get_event_status(item):
     if state == "COMPLETED":
         return "Closed"
     return "Open"
+
+
+def get_stel_state_from_event_status(status):
+    return {"Closed": "COMPLETED", "Cancelled": "REFUSED"}.get(str(status or ""), "PENDING")
+
+
+def normalize_event_category(value):
+    value = str(value or "").strip().casefold()
+    if any(token in value for token in ("reun", "meeting")):
+        return "Meeting"
+    if any(token in value for token in ("llamada", "call", "teléfono", "telefono")):
+        return "Call"
+    if any(token in value for token in ("email", "correo", "mail")):
+        return "Sent/Received Email"
+    if any(token in value for token in ("otro", "other")):
+        return "Other"
+    return "Event"
 
 
 def get_stel_event_state(item):
