@@ -5,6 +5,7 @@ frappe.pages["planning-calendar"].on_page_load = function (wrapper) {
 class ElectrixPlanningCalendar {
 	constructor(wrapper) {
 		this.page = frappe.ui.make_app_page({ parent: wrapper, title: __("Calendario de planificación"), single_column: true });
+		this.ensureComponentStyles();
 		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.visibleEmployees = new Set();
 		this.page.add_inner_button(__("Tabla"), () => frappe.set_route("planning"));
@@ -14,6 +15,38 @@ class ElectrixPlanningCalendar {
 		this.addCalendarMenu();
 		this.page.set_primary_action(__("Actualizar"), () => this.load(), "refresh");
 		this.load();
+	}
+
+	ensureComponentStyles() {
+		if (document.getElementById("electrix-planning-calendar-actions-style")) return;
+		$(document.head).append(`<style id="electrix-planning-calendar-actions-style">
+			.pc-event > button.pc-actions-toggle {
+				position:absolute !important; inset:3px 3px auto auto !important;
+				width:18px !important; min-width:18px !important; max-width:18px !important;
+				height:18px !important; min-height:18px !important; margin:0 !important;
+				padding:0 !important; display:flex !important; align-items:center !important;
+				justify-content:center !important; border:0 !important; border-radius:4px !important;
+				background:transparent !important; box-shadow:none !important; color:var(--text-muted) !important;
+				font-size:10px !important; line-height:1 !important; opacity:.55; z-index:5;
+			}
+			.pc-event > button.pc-actions-toggle:hover,
+			.pc-event > button.pc-actions-toggle:focus { opacity:1; background:var(--control-bg) !important; }
+			body > .pc-event-actions-menu {
+				position:fixed !important; display:block !important; z-index:1060 !important;
+				min-width:160px !important; width:auto !important; margin:0 !important; padding:5px !important;
+				border:1px solid var(--border-color) !important; border-radius:8px !important;
+				background:var(--card-bg) !important; box-shadow:0 8px 24px rgba(0,0,0,.16) !important;
+			}
+			body > .pc-event-actions-menu > button {
+				position:static !important; width:100% !important; min-width:0 !important; height:auto !important;
+				display:flex !important; align-items:center !important; gap:8px !important;
+				margin:0 !important; padding:7px 9px !important; border:0 !important; border-radius:5px !important;
+				background:transparent !important; box-shadow:none !important; color:var(--text-color) !important;
+				text-align:left !important;
+			}
+			body > .pc-event-actions-menu > button:hover,
+			body > .pc-event-actions-menu > button:focus { background:var(--subtle-fg) !important; }
+		</style>`);
 	}
 
 	addCalendarMenu() {
