@@ -12,8 +12,8 @@ from electrix_sync.api.sync import (
     get_event_status,
     get_stel_id,
     match_employee_calendar,
+    normalize_stel_event_datetime,
     normalize_event_category,
-    normalize_datetime,
 )
 
 
@@ -150,8 +150,8 @@ def repair_calendar_assignments(refresh=False):
                 "custom_planning_status": planning_status,
                 "status": event_status,
                 **({"event_category": event_category} if frappe.get_meta("Event").has_field("event_category") else {}),
-                "starts_on": normalize_datetime(starts_on),
-                "ends_on": normalize_datetime(ends_on),
+                "starts_on": normalize_stel_event_datetime(starts_on),
+                "ends_on": normalize_stel_event_datetime(ends_on),
                 "description": str(source.get("description") or "").strip(),
             },
             update_modified=False,

@@ -395,7 +395,7 @@ def add_projects_sidebar_items():
                 "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                 "parenttype": "Workspace Sidebar", "parentfield": "items",
                 "idx": len(desired_links) + 1, "label": "Planificación", "type": "Section Break",
-                "child": 0, "collapsible": 1, "indent": 0, "show_arrow": 1, "keep_closed": 1,
+                "child": 0, "collapsible": 1, "indent": 0, "show_arrow": 0, "keep_closed": 1,
             }).insert(ignore_permissions=True)
             ordered_names.append(section.name)
             for idx, item_data in enumerate((
