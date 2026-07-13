@@ -22,12 +22,12 @@ class ElectrixPlanningCalendar {
 		$(document.head).append(`<style id="electrix-planning-calendar-actions-style">
 			.pc-event > button.pc-actions-toggle {
 				position:absolute !important; inset:3px 3px auto auto !important;
-				width:18px !important; min-width:18px !important; max-width:18px !important;
-				height:18px !important; min-height:18px !important; margin:0 !important;
+				width:22px !important; min-width:22px !important; max-width:22px !important;
+				height:22px !important; min-height:22px !important; margin:0 !important;
 				padding:0 !important; display:flex !important; align-items:center !important;
 				justify-content:center !important; border:0 !important; border-radius:4px !important;
 				background:transparent !important; box-shadow:none !important; color:var(--text-muted) !important;
-				font-size:10px !important; line-height:1 !important; opacity:.55; z-index:5;
+				font-size:14px !important; line-height:1 !important; opacity:.8; z-index:5;
 			}
 			.pc-event > button.pc-actions-toggle:hover,
 			.pc-event > button.pc-actions-toggle:focus { opacity:1; background:var(--control-bg) !important; }
@@ -42,8 +42,9 @@ class ElectrixPlanningCalendar {
 				display:flex !important; align-items:center !important; gap:8px !important;
 				margin:0 !important; padding:7px 9px !important; border:0 !important; border-radius:5px !important;
 				background:transparent !important; box-shadow:none !important; color:var(--text-color) !important;
-				text-align:left !important;
+				justify-content:flex-start !important; text-align:left !important;
 			}
+			body > .pc-event-actions-menu > button > span { flex:1; text-align:left !important; }
 			body > .pc-event-actions-menu > button:hover,
 			body > .pc-event-actions-menu > button:focus { background:var(--subtle-fg) !important; }
 		</style>`);
