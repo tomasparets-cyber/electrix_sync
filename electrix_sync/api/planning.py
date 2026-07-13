@@ -63,22 +63,8 @@ def get_board(start_date=None, days=7):
         limit_page_length=500,
     )
     all_events = {row.name: row for row in [*planned, *unplanned]}
-    if all_events:
-        assignments = frappe.get_all(
-            "STEL Event Assignment",
-            filters={"parent": ["in", list(all_events)]},
-            fields=["parent", "employee", "stel_calendar_id", "stel_event_id"],
-            order_by="idx asc",
-            limit_page_length=0,
-        )
-        by_event = {}
-        for assignment in assignments:
-            by_event.setdefault(assignment.parent, []).append(assignment)
-        for event in all_events.values():
-            event["assignments"] = by_event.get(event.name, [])
-            event["assigned_employees"] = [row.employee for row in event["assignments"]]
-            if not event["assigned_employees"] and event.custom_assigned_employee:
-                event["assigned_employees"] = [event.custom_assigned_employee]
+    for event in all_events.values():
+        event["assigned_employees"] = [event.custom_assigned_employee] if event.custom_assigned_employee else []
     return {
         "start_date": str(start_date),
         "days": [str(add_days(start_date, offset)) for offset in range(days)],
@@ -170,20 +156,6 @@ def repair_calendar_assignments(refresh=False):
             },
             update_modified=False,
         )
-        if employee and calendar_id:
-            event_doc = frappe.get_doc("Event", event.name)
-            assignment = next(
-                (row for row in event_doc.custom_stel_assignments if str(row.stel_event_id or "") == str(event.custom_stel_id)),
-                None,
-            )
-            if not assignment:
-                event_doc.append("custom_stel_assignments", {
-                    "employee": employee,
-                    "stel_calendar_id": str(calendar_id),
-                    "stel_event_id": str(event.custom_stel_id),
-                })
-                event_doc.flags.skip_stel_outbound = True
-                event_doc.save(ignore_permissions=True)
         if planning_status != "Unplanned":
             mapped_events += 1
 
@@ -214,19 +186,15 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
 
     event.starts_on = starts_on
     event.ends_on = ends_on
-    ensure_legacy_assignment(event)
-    existing_assignment = next((row for row in event.custom_stel_assignments if row.employee == employee), None)
-    for assignment in event.custom_stel_assignments:
-        if assignment.stel_event_id:
-            update_stel_event_copy(event, assignment.stel_event_id, starts_on, ends_on)
-    if not existing_assignment:
-        stel_event_id = create_stel_event(event, calendar_id, starts_on, ends_on)
-        event.append("custom_stel_assignments", {
-            "employee": employee,
-            "stel_calendar_id": str(calendar_id),
-            "stel_event_id": str(stel_event_id),
-        })
-    set_primary_assignment(event)
+    if event.get("custom_stel_id"):
+        if str(event.get("custom_stel_calendar_id") or "") == str(calendar_id):
+            update_stel_event_copy(event, event.custom_stel_id, starts_on, ends_on)
+        else:
+            event.custom_stel_id = replace_stel_event(event, calendar_id, starts_on, ends_on)
+    else:
+        event.custom_stel_id = create_stel_event(event, calendar_id, starts_on, ends_on)
+    event.custom_assigned_employee = employee
+    event.custom_stel_calendar_id = str(calendar_id)
     event.custom_planning_status = "Planned"
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     event.flags.skip_stel_outbound = True
@@ -237,11 +205,9 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
 
 @frappe.whitelist()
 def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employees=None):
-    employee_names = parse_employees(employees) or [employee]
-    employee_docs = [frappe.get_doc("Employee", name) for name in employee_names]
-    missing = [row.employee_name for row in employee_docs if not row.get("custom_stel_calendar_id")]
-    if missing:
-        frappe.throw(_("Employees without a STEL calendar: {0}").format(", ".join(missing)))
+    employee_doc = frappe.get_doc("Employee", employee)
+    if not employee_doc.get("custom_stel_calendar_id"):
+        frappe.throw(_("Employee {0} has no STEL calendar assigned").format(employee_doc.employee_name))
     starts_on = get_datetime(starts_on)
     ends_on = get_datetime(ends_on)
     if ends_on <= starts_on:
@@ -257,27 +223,21 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
         event.event_category = event_category or None
     if event.meta.has_field("location"):
         event.location = location or None
-    event.custom_assigned_employee = employee_names[0]
+    event.custom_assigned_employee = employee
+    event.custom_stel_calendar_id = str(employee_doc.custom_stel_calendar_id)
     event.custom_planning_status = "Planned"
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     event.flags.skip_stel_outbound = True
     event.insert(ignore_permissions=True)
-    for employee_doc in employee_docs:
-        stel_event_id = create_stel_event(event, employee_doc.custom_stel_calendar_id, starts_on, ends_on)
-        event.append("custom_stel_assignments", {
-            "employee": employee_doc.name,
-            "stel_calendar_id": str(employee_doc.custom_stel_calendar_id),
-            "stel_event_id": str(stel_event_id),
-        })
-    set_primary_assignment(event)
+    event.custom_stel_id = create_stel_event(event, employee_doc.custom_stel_calendar_id, starts_on, ends_on)
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
-    set_event_participants(event, [row.get("user_id") for row in employee_docs])
+    set_event_participant(event, employee_doc.get("user_id"))
     return {"name": event.name, "stel_id": event.custom_stel_id}
 
 
 @frappe.whitelist()
-def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employees=None):
+def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employee=None, employees=None):
     event = frappe.get_doc("Event", event_name)
     event.check_permission("write")
     starts_on = get_datetime(starts_on)
@@ -294,14 +254,20 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
     if event.meta.has_field("location"):
         event.location = location or None
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
-    ensure_legacy_assignment(event)
-    if employees is not None:
-        reconcile_assignments(event, parse_employees(employees), starts_on, ends_on)
-    else:
-        for assignment in event.custom_stel_assignments:
-            if assignment.stel_event_id:
-                update_stel_event_copy(event, assignment.stel_event_id, starts_on, ends_on)
-    set_primary_assignment(event)
+    employee = employee or event.get("custom_assigned_employee")
+    if employee:
+        employee_doc = frappe.get_doc("Employee", employee)
+        calendar_id = employee_doc.get("custom_stel_calendar_id")
+        if not calendar_id:
+            frappe.throw(_("Employee {0} has no STEL calendar assigned").format(employee_doc.employee_name))
+        if event.get("custom_stel_id") and str(event.get("custom_stel_calendar_id") or "") == str(calendar_id):
+            update_stel_event_copy(event, event.custom_stel_id, starts_on, ends_on)
+        elif event.get("custom_stel_id"):
+            event.custom_stel_id = replace_stel_event(event, calendar_id, starts_on, ends_on)
+        else:
+            event.custom_stel_id = create_stel_event(event, calendar_id, starts_on, ends_on)
+        event.custom_assigned_employee = employee
+        event.custom_stel_calendar_id = str(calendar_id)
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     return {"name": event.name, "stel_id": event.custom_stel_id}
@@ -311,15 +277,8 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
 def unplan_event(event_name):
     event = frappe.get_doc("Event", event_name)
     event.check_permission("write")
-    ensure_legacy_assignment(event)
-    deleted_ids = set()
-    for assignment in event.custom_stel_assignments:
-        if assignment.stel_event_id and assignment.stel_event_id not in deleted_ids:
-            StelClient().delete_event(assignment.stel_event_id)
-            deleted_ids.add(assignment.stel_event_id)
-    if event.get("custom_stel_id") and event.custom_stel_id not in deleted_ids:
+    if event.get("custom_stel_id"):
         StelClient().delete_event(event.custom_stel_id)
-    event.set("custom_stel_assignments", [])
     event.custom_stel_id = None
     event.custom_stel_calendar_id = None
     event.custom_assigned_employee = None
@@ -337,12 +296,7 @@ def resize_event(event_name, starts_on, ends_on):
     ends_on = get_datetime(ends_on)
     if ends_on <= starts_on:
         frappe.throw(_("End time must be after start time"))
-    ensure_legacy_assignment(event)
-    if event.get("custom_stel_assignments"):
-        for assignment in event.custom_stel_assignments:
-            if assignment.stel_event_id:
-                update_stel_event_copy(event, assignment.stel_event_id, starts_on, ends_on)
-    elif event.get("custom_stel_id"):
+    if event.get("custom_stel_id"):
         update_stel_event(event, starts_on, ends_on)
     event.starts_on = starts_on
     event.ends_on = ends_on
@@ -388,7 +342,24 @@ def replace_stel_event(event, calendar_id, starts_on, ends_on):
         except Exception:
             pass
         raise
-    event.custom_stel_id = str(new_id)
+    return str(new_id)
+
+
+@frappe.whitelist()
+def duplicate_event(event_name, starts_on=None, employee=None):
+    """Duplicate one ERP/STEL event for the selected employee."""
+    source = frappe.get_doc("Event", event_name)
+    source.check_permission("read")
+    employee = employee or source.get("custom_assigned_employee")
+    if not employee:
+        frappe.throw(_("Select an employee before duplicating the event"))
+    start = get_datetime(starts_on or source.starts_on)
+    duration = max(get_datetime(source.ends_on or source.starts_on) - get_datetime(source.starts_on), timedelta(minutes=15))
+    return create_planned_event(
+        employee=employee, subject=source.subject, starts_on=start, ends_on=start + duration,
+        description=source.description, event_category=source.get("event_category"), status=source.status,
+        location=source.get("location"),
+    )
 
 
 def create_stel_event(event, calendar_id, starts_on, ends_on):
@@ -426,61 +397,6 @@ def update_stel_event_copy(event, stel_event_id, starts_on, ends_on):
         payload["event-type-id"] = int(event_type_id)
     add_standard_event_relations(event, payload)
     StelClient().update_event(stel_event_id, payload)
-
-
-def ensure_legacy_assignment(event):
-    if event.get("custom_stel_assignments"):
-        return
-    if event.get("custom_assigned_employee") and event.get("custom_stel_calendar_id"):
-        event.append("custom_stel_assignments", {
-            "employee": event.custom_assigned_employee,
-            "stel_calendar_id": str(event.custom_stel_calendar_id),
-            "stel_event_id": str(event.custom_stel_id) if event.get("custom_stel_id") else None,
-        })
-
-
-def set_primary_assignment(event):
-    first = event.custom_stel_assignments[0] if event.get("custom_stel_assignments") else None
-    event.custom_assigned_employee = first.employee if first else None
-    event.custom_stel_calendar_id = first.stel_calendar_id if first else None
-    event.custom_stel_id = first.stel_event_id if first else None
-    event.custom_planning_status = "Planned" if first else "Unplanned"
-
-
-def parse_employees(value):
-    if value in (None, ""):
-        return []
-    if isinstance(value, str):
-        value = frappe.parse_json(value)
-    normalized = [
-        (item.get("employee") or item.get("value")) if isinstance(item, dict) else item
-        for item in (value or [])
-    ]
-    return list(dict.fromkeys(item for item in normalized if item))
-
-
-def reconcile_assignments(event, employee_names, starts_on, ends_on):
-    desired = set(employee_names)
-    current = {row.employee: row for row in event.custom_stel_assignments}
-    for employee, assignment in list(current.items()):
-        if employee not in desired:
-            if assignment.stel_event_id:
-                StelClient().delete_event(assignment.stel_event_id)
-            event.remove(assignment)
-    for employee in employee_names:
-        if employee in current:
-            if current[employee].stel_event_id:
-                update_stel_event_copy(event, current[employee].stel_event_id, starts_on, ends_on)
-            continue
-        employee_doc = frappe.get_doc("Employee", employee)
-        if not employee_doc.get("custom_stel_calendar_id"):
-            frappe.throw(_("Employee {0} has no STEL calendar assigned").format(employee_doc.employee_name))
-        stel_event_id = create_stel_event(event, employee_doc.custom_stel_calendar_id, starts_on, ends_on)
-        event.append("custom_stel_assignments", {
-            "employee": employee,
-            "stel_calendar_id": str(employee_doc.custom_stel_calendar_id),
-            "stel_event_id": str(stel_event_id),
-        })
 
 
 def set_event_participant(event, user):

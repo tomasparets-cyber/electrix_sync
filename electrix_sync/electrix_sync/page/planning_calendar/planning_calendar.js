@@ -91,8 +91,8 @@ class ElectrixPlanningCalendar {
 				const top = start * 0.8;
 				const height = Math.max((end - start) * 0.8, 20);
 				const width = 94 / Math.max(employees.length, 1);
-				cards.push(`<div class="pc-event" draggable="true" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
-					<strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
+				cards.push(`<div class="pc-event" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
+					<button class="pc-duplicate" title="${__("Duplicar evento")}">${frappe.utils.icon("copy", "xs")}</button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
 				</div>`);
 			});
 		}
@@ -100,52 +100,69 @@ class ElectrixPlanningCalendar {
 	}
 
 	bind() {
-		this.page.main.find(".pc-event").on("dragstart", (event) => {
-			if ($(event.target).hasClass("pc-resize")) { event.preventDefault(); return; }
-			this.didManipulate = true;
-			event.originalEvent.dataTransfer.effectAllowed = "move";
-			event.originalEvent.dataTransfer.setData("text/plain", event.currentTarget.dataset.event);
-			this.dragged = event.currentTarget;
+		this.page.main.find(".pc-event").on("pointerdown", (event) => {
+			if ($(event.target).closest(".pc-resize,.pc-duplicate").length) return;
+			this.startMove(event);
 		});
-		this.page.main.find(".pc-day").on("dragover", (event) => { event.preventDefault(); event.currentTarget.classList.add("is-over"); event.originalEvent.dataTransfer.dropEffect = "move"; });
-		this.page.main.find(".pc-day").on("dragleave", (event) => event.currentTarget.classList.remove("is-over"));
-		this.page.main.find(".pc-day").on("drop", (event) => this.dropEvent(event));
 		this.page.main.find(".pc-event").on("click", (event) => {
 			if (this.didManipulate) { this.didManipulate = false; return; }
 			frappe.set_route("Form", "Event", event.currentTarget.dataset.event);
 		});
 		this.page.main.find(".pc-resize").on("pointerdown", (event) => this.startResize(event));
+		this.page.main.find(".pc-duplicate").on("click", (event) => this.duplicateEvent(event));
 	}
 
-	async dropEvent(event) {
+	startMove(event) {
 		event.preventDefault();
-		event.currentTarget.classList.remove("is-over");
-		const card = this.dragged;
-		if (!card) return;
-		const day = event.currentTarget.dataset.day;
-		const rect = event.currentTarget.getBoundingClientRect();
-		const minutes = this.snapMinutes((event.originalEvent.clientY - rect.top) / 0.8);
+		const card = event.currentTarget;
+		const originX = event.originalEvent.clientX;
+		const originY = event.originalEvent.clientY;
 		const duration = Math.max(this.datetimeMinutes(card.dataset.end) - this.datetimeMinutes(card.dataset.start), 15);
-		await this.persistTime(card.dataset.event, this.dateTime(day, minutes), this.dateTime(day, Math.min(minutes + duration, 1440)));
+		this.didManipulate = false;
+		card.classList.add("is-moving");
+		const move = (pointerEvent) => {
+			if (Math.abs(pointerEvent.clientX - originX) + Math.abs(pointerEvent.clientY - originY) > 4) this.didManipulate = true;
+			card.style.transform = `translate(${pointerEvent.clientX - originX}px, ${pointerEvent.clientY - originY}px)`;
+		};
+		const up = async (pointerEvent) => {
+			document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
+			card.classList.remove("is-moving"); card.style.transform = "";
+			if (!this.didManipulate) return;
+			const dayColumn = document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY)?.closest(".pc-day");
+			if (!dayColumn) return;
+			const rect = dayColumn.getBoundingClientRect();
+			const minutes = this.snapMinutes((pointerEvent.clientY - rect.top) / 0.8);
+			await this.persistTime(card.dataset.event, this.dateTime(dayColumn.dataset.day, minutes), this.dateTime(dayColumn.dataset.day, minutes + duration));
+		};
+		document.addEventListener("pointermove", move); document.addEventListener("pointerup", up, { once: true });
 	}
 
 	startResize(event) {
 		event.preventDefault(); event.stopPropagation();
 		const card = event.currentTarget.closest(".pc-event");
 		const originY = event.originalEvent.clientY;
-		const originHeight = card.getBoundingClientRect().height;
+		const originalDuration = Math.max(this.datetimeMinutes(card.dataset.end) - this.datetimeMinutes(card.dataset.start), 15);
 		this.didManipulate = true;
 		const move = (pointerEvent) => {
-			const height = Math.max(12, originHeight + pointerEvent.clientY - originY);
-			card.style.height = `${height}px`;
+			const duration = Math.max(15, this.snapDuration(originalDuration + (pointerEvent.clientY - originY) / 0.8));
+			card.style.height = `${duration * 0.8}px`;
+			card.dataset.previewDuration = duration;
 		};
 		const up = async () => {
 			document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
-			const duration = Math.max(this.snapMinutes(parseFloat(card.style.height) / 0.8), 15);
+			const duration = Number(card.dataset.previewDuration || originalDuration);
 			const start = card.dataset.start;
 			await this.persistTime(card.dataset.event, start, this.addMinutes(start, duration));
 		};
 		document.addEventListener("pointermove", move); document.addEventListener("pointerup", up, { once: true });
+	}
+
+	async duplicateEvent(event) {
+		event.preventDefault(); event.stopPropagation();
+		const card = event.currentTarget.closest(".pc-event");
+		await frappe.call({ method: "electrix_sync.api.planning.duplicate_event", args: { event_name: card.dataset.event }, freeze: true, freeze_message: __("Duplicando evento…") });
+		frappe.show_alert({ message: __("Evento duplicado"), indicator: "green" });
+		await this.load();
 	}
 
 	async persistTime(eventName, startsOn, endsOn) {
@@ -164,9 +181,11 @@ class ElectrixPlanningCalendar {
 	}
 
 	snapMinutes(value) { return Math.max(0, Math.min(1425, Math.round(value / 15) * 15)); }
+	snapDuration(value) { return Math.round(value / 15) * 15; }
 	dateTime(day, minutes) {
-		if (minutes >= 1440) return `${frappe.datetime.add_days(day, 1)} 00:00:00`;
-		return `${day} ${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}:00`;
+		const dayOffset = Math.floor(minutes / 1440);
+		const minuteOfDay = ((minutes % 1440) + 1440) % 1440;
+		return `${frappe.datetime.add_days(day, dayOffset)} ${String(Math.floor(minuteOfDay / 60)).padStart(2, "0")}:${String(minuteOfDay % 60).padStart(2, "0")}:00`;
 	}
 	datetimeMinutes(value) { const date = new Date(String(value).replace(" ", "T")); return Math.round(date.getTime() / 60000); }
 	addMinutes(value, minutes) { const date = new Date(String(value).replace(" ", "T")); date.setMinutes(date.getMinutes() + minutes); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}:00`; }

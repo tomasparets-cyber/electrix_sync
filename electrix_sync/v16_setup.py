@@ -14,13 +14,14 @@ def ensure_staging_doctypes():
         "lugar_stel_link",
         "lugar",
         "stel_event_type",
-        "stel_event_assignment",
     ):
         frappe.reload_doc("electrix_sync", "doctype", doctype_name, force=True)
 
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
+    migrate_event_assignments_to_individual_events()
+    remove_event_assignment_table()
     migrate_standard_status_and_type_fields()
     remove_redundant_functional_fields()
     add_projects_workspace_shortcuts()
@@ -103,8 +104,7 @@ def ensure_master_data_fields():
         "Event": [
             {**common[0], "insert_after": "subject"},
             {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_id"},
-            {"fieldname": "custom_stel_assignments", "label": "Empleados y calendarios STEL", "fieldtype": "Table", "options": "STEL Event Assignment", "insert_after": "custom_assigned_employee"},
-            {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_assignments"},
+            {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_assigned_employee"},
             {"fieldname": "custom_planning_status", "label": "Estado de planificación", "fieldtype": "Select", "options": "Unplanned\nPlanned\nCompleted", "default": "Unplanned", "insert_after": "custom_stel_calendar_id"},
             {"fieldname": "custom_estimated_duration", "label": "Duración estimada (horas)", "fieldtype": "Float", "default": "1", "insert_after": "custom_planning_status"},
             {**common[1], "insert_after": "custom_estimated_duration"},
@@ -120,6 +120,53 @@ def ensure_master_data_fields():
     for doctype in available:
         frappe.clear_cache(doctype=doctype)
         frappe.db.updatedb(doctype)
+
+
+def migrate_event_assignments_to_individual_events():
+    """Convert the former many-employees child table into one Event per employee.
+
+    The original Event keeps the first STEL copy. Additional child rows become
+    independent Events and retain their existing STEL event/calendar IDs.
+    """
+    if not frappe.db.exists("DocType", "Event") or not frappe.db.exists("DocType", "STEL Event Assignment"):
+        return
+    field = frappe.db.get_value("Custom Field", {"dt": "Event", "fieldname": "custom_stel_assignments"}, "name")
+    if not field:
+        return
+    parents = frappe.get_all(
+        "STEL Event Assignment", fields=["parent"], group_by="parent", limit_page_length=0
+    )
+    for row in parents:
+        if not frappe.db.exists("Event", row.parent):
+            continue
+        assignments = frappe.get_all(
+            "STEL Event Assignment", filters={"parent": row.parent},
+            fields=["employee", "stel_calendar_id", "stel_event_id"], order_by="idx asc", limit_page_length=0,
+        )
+        if not assignments:
+            continue
+        source = frappe.get_doc("Event", row.parent)
+        for index, assignment in enumerate(assignments):
+            target = source if index == 0 else frappe.copy_doc(source)
+            target.name = None if index else source.name
+            target.custom_assigned_employee = assignment.employee
+            target.custom_stel_calendar_id = assignment.stel_calendar_id
+            target.custom_stel_id = assignment.stel_event_id
+            target.set("custom_stel_assignments", [])
+            target.flags.skip_stel_outbound = True
+            if index == 0:
+                target.save(ignore_permissions=True)
+            else:
+                target.insert(ignore_permissions=True)
+
+
+def remove_event_assignment_table():
+    field = frappe.db.get_value("Custom Field", {"dt": "Event", "fieldname": "custom_stel_assignments"}, "name")
+    if field:
+        frappe.delete_doc("Custom Field", field, ignore_permissions=True, force=True)
+        frappe.clear_cache(doctype="Event")
+    if frappe.db.exists("DocType", "STEL Event Assignment"):
+        frappe.delete_doc("DocType", "STEL Event Assignment", ignore_permissions=True, force=True)
 
 
 def migrate_standard_status_and_type_fields():
@@ -285,7 +332,7 @@ def add_projects_sidebar_items():
                 "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                 "parenttype": "Workspace Sidebar", "parentfield": "items",
                 "idx": 7, "label": "Planificación", "type": "Section Break",
-                "collapsible": 1, "indent": 1, "show_arrow": 0, "keep_closed": 0,
+                "collapsible": 1, "indent": 1, "show_arrow": 1, "keep_closed": 1,
             }).insert(ignore_permissions=True)
             ordered_names.append(section.name)
             for idx, item_data in enumerate((

@@ -14,6 +14,10 @@
 .pc-day { position:relative; height:1152px; border-left:1px solid var(--border-color); background:repeating-linear-gradient(to bottom,transparent 0,transparent 47px,var(--border-color) 48px); }
 .pc-event { position:absolute; z-index:2; overflow:hidden; padding:4px 5px 8px; border:0; border-left:3px solid var(--blue-500); border-radius:5px; background:var(--blue-100); color:var(--text-color); text-align:left; font-size:10px; display:flex; flex-direction:column; cursor:grab; user-select:none; }
 .pc-event:active { cursor:grabbing; }
+.pc-event.is-moving { opacity:.72; z-index:20; cursor:grabbing; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+.pc-duplicate { position:absolute; top:3px; right:3px; border:0; background:transparent; padding:2px; opacity:0; z-index:3; }
+.pc-event:hover .pc-duplicate { opacity:.65; }
+.pc-duplicate:hover { opacity:1 !important; }
 .pc-event strong { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pc-event span,.pc-event small { color:var(--text-muted); }
 .pc-resize { position:absolute; left:3px; right:3px; bottom:0; height:7px; cursor:ns-resize; border-bottom:2px solid color-mix(in srgb,var(--blue-500) 55%,transparent); }

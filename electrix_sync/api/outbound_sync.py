@@ -107,13 +107,6 @@ def push_event(doc):
 
     client = StelClient()
     stel_id = doc.get("custom_stel_id")
-    assignments = doc.get("custom_stel_assignments") or []
-    if assignments:
-        for assignment in assignments:
-            if assignment.stel_event_id:
-                client.update_event(assignment.stel_event_id, payload)
-        mark_synced("Event", doc.name)
-        return
     response = client.update_event(stel_id, payload) if stel_id else client.create_event(payload)
     if not stel_id:
         stel_id = extract_stel_id(response)

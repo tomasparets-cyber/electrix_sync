@@ -412,12 +412,8 @@ def sync_event(item, event_type_names=None):
         if item.get("deleted") is True:
             return sync_deleted_event(stel_id, item)
 
-        assignment_parent = frappe.db.get_value(
-            "STEL Event Assignment", {"stel_event_id": stel_id}, "parent"
-        ) if frappe.db.exists("DocType", "STEL Event Assignment") else None
-        existing = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name") or assignment_parent
+        existing = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name")
         doc = frappe.get_doc("Event", existing) if existing else frappe.new_doc("Event")
-        is_secondary = bool(assignment_parent and doc.get("custom_stel_id") and str(doc.custom_stel_id) != str(stel_id))
 
         doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
         doc.event_type = "Private"
@@ -434,8 +430,7 @@ def sync_event(item, event_type_names=None):
         if customer and has_field(doc, "reference_doctype") and has_field(doc, "reference_docname"):
             doc.reference_doctype = "Customer"
             doc.reference_docname = customer
-        if not is_secondary:
-            doc.custom_stel_id = stel_id
+        doc.custom_stel_id = stel_id
         event_type_id = get_first(item, "event-type-id", "eventTypeId")
         if event_type_id and has_field(doc, "event_category"):
             event_type_name = (event_type_names or {}).get(str(event_type_id))
@@ -444,9 +439,9 @@ def sync_event(item, event_type_names=None):
         stel_state = get_stel_event_state(item)
         calendar_id = get_first(item, "calendar-id", "calendarId")
         employee = get_employee_by_stel_calendar_id(calendar_id)
-        if has_field(doc, "custom_stel_calendar_id") and not is_secondary:
+        if has_field(doc, "custom_stel_calendar_id"):
             doc.custom_stel_calendar_id = calendar_id
-        if has_field(doc, "custom_assigned_employee") and not is_secondary:
+        if has_field(doc, "custom_assigned_employee"):
             doc.custom_assigned_employee = employee
         if has_field(doc, "custom_planning_status"):
             doc.custom_planning_status = "Completed" if stel_state == "COMPLETED" else (
@@ -466,8 +461,6 @@ def sync_event(item, event_type_names=None):
         else:
             doc.insert(ignore_permissions=True)
             action = "created"
-
-        sync_event_assignment(doc, employee, calendar_id, stel_id)
 
         add_event_participant(doc, get_first(item, "creator-id", "creatorId"))
         log_sync("Event", "Success", stel_id, "Event", doc.name, f"Event {action}", payload=item)
@@ -860,22 +853,6 @@ def ensure_stel_event_type(stel_id, event_type_name=None):
         "event_type_name": event_type_name or f"STEL {stel_id}",
     }).insert(ignore_permissions=True)
     return stel_id
-
-
-def sync_event_assignment(event, employee, calendar_id, stel_event_id):
-    if not employee or not calendar_id or not event.meta.has_field("custom_stel_assignments"):
-        return
-    assignment = next(
-        (row for row in event.custom_stel_assignments if str(row.stel_event_id or "") == str(stel_event_id)),
-        None,
-    )
-    if not assignment:
-        assignment = event.append("custom_stel_assignments", {})
-    assignment.employee = employee
-    assignment.stel_calendar_id = str(calendar_id)
-    assignment.stel_event_id = str(stel_event_id)
-    event.flags.skip_stel_outbound = True
-    event.save(ignore_permissions=True)
 
 
 def build_event_description(item):
