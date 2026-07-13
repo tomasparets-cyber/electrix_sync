@@ -994,10 +994,18 @@ def get_lead_by_stel_id(stel_lead_id):
 def get_project_by_stel_address_id(stel_address_id):
     if not stel_address_id or not frappe.db.exists("DocType", "Project"):
         return None
-    if not frappe.get_meta("Project").has_field("custom_lugar"):
+    project_meta = frappe.get_meta("Project")
+    location_field = "custom_service_location" if project_meta.has_field("custom_service_location") else (
+        "custom_lugar" if project_meta.has_field("custom_lugar") else None
+    )
+    if not location_field:
         return None
 
     place_names = []
+    if frappe.db.exists("DocType", "Lugar STEL Link"):
+        linked_place = frappe.db.get_value("Lugar STEL Link", {"stel_address_id": str(stel_address_id)}, "parent")
+        if linked_place:
+            place_names.append(linked_place)
     for doctype in ("Address", "Lugar"):
         if frappe.db.exists("DocType", doctype) and frappe.get_meta(doctype).has_field("custom_stel_id"):
             name = frappe.db.get_value(doctype, {"custom_stel_id": str(stel_address_id)}, "name")
@@ -1005,7 +1013,7 @@ def get_project_by_stel_address_id(stel_address_id):
                 place_names.append(name)
 
     for place_name in place_names:
-        project = frappe.db.get_value("Project", {"custom_lugar": place_name}, "name")
+        project = frappe.db.get_value("Project", {location_field: place_name}, "name")
         if project:
             return project
     return None

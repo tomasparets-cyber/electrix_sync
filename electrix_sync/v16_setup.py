@@ -20,12 +20,14 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
+    migrate_project_location_field()
+    add_projects_workspace_shortcuts()
+    add_projects_sidebar_items()
     migrate_event_assignments_to_individual_events()
     remove_event_assignment_table()
     migrate_standard_status_and_type_fields()
     remove_redundant_functional_fields()
-    add_projects_workspace_shortcuts()
-    add_projects_sidebar_items()
+    repair_task_project_links()
 
 
 def ensure_master_data_fields():
@@ -166,7 +168,46 @@ def remove_event_assignment_table():
         frappe.delete_doc("Custom Field", field, ignore_permissions=True, force=True)
         frappe.clear_cache(doctype="Event")
     if frappe.db.exists("DocType", "STEL Event Assignment"):
-        frappe.delete_doc("DocType", "STEL Event Assignment", ignore_permissions=True, force=True)
+        try:
+            frappe.delete_doc("DocType", "STEL Event Assignment", ignore_permissions=True, force=True)
+        except Exception:
+            # The obsolete module files are intentionally absent in new builds;
+            # failure to remove its metadata must not block other repairs.
+            frappe.log_error(frappe.get_traceback(), "Could not remove obsolete STEL Event Assignment")
+
+
+def migrate_project_location_field():
+    """Keep one stable Project→Lugar field across ERPNext upgrades."""
+    if not frappe.db.exists("DocType", "Project"):
+        return
+    meta = frappe.get_meta("Project")
+    if not meta.has_field("custom_service_location"):
+        return
+    if meta.has_field("custom_lugar"):
+        frappe.db.sql("""
+            update `tabProject`
+               set custom_service_location = custom_lugar
+             where (custom_service_location is null or custom_service_location = '')
+               and custom_lugar is not null and custom_lugar != ''
+        """)
+
+
+def repair_task_project_links():
+    """Restore Task.project from the immutable staged STEL incident address."""
+    if not frappe.db.exists("DocType", "Task") or not frappe.db.exists("DocType", "Project"):
+        return
+    try:
+        from electrix_sync.api.master_data import get_staged
+        from electrix_sync.api.sync import get_incident_address_id, get_project_by_stel_address_id, get_stel_id
+
+        for row in get_staged("incidents"):
+            stel_id = get_stel_id(row["data"])
+            task = frappe.db.get_value("Task", {"custom_stel_id": str(stel_id)}, "name") if stel_id else None
+            project = get_project_by_stel_address_id(get_incident_address_id(row["data"]))
+            if task and project and frappe.db.get_value("Task", task, "project") != project:
+                frappe.db.set_value("Task", task, "project", project, update_modified=False)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "Could not repair Task project links")
 
 
 def migrate_standard_status_and_type_fields():
@@ -264,6 +305,20 @@ def add_projects_sidebar_items():
         fields=["name", "title", "module", "for_user"],
     )
     by_name = {row.name: row for row in [*sidebar_rows, *module_rows]}
+    # ERPNext occasionally renames/replaces the Projects sidebar during an
+    # update. Discover its replacement by its standard Project/Task links.
+    linked_items = frappe.get_all(
+        "Workspace Sidebar Item",
+        filters={"link_to": ["in", ["Project", "Task"]]},
+        fields=["parent"], group_by="parent", limit_page_length=0,
+    )
+    for item in linked_items:
+        if item.parent and frappe.db.exists("Workspace Sidebar", item.parent):
+            row = frappe.db.get_value(
+                "Workspace Sidebar", item.parent, ["name", "title", "module", "for_user"], as_dict=True
+            )
+            if row:
+                by_name[row.name] = row
 
     desired_links = (
         {"label": "Home", "link_type": "Workspace", "link_to": "Projects", "icon": "home"},

@@ -37,5 +37,8 @@
   {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1}
  ],
  "sort_field": "modified",
- "sort_order": "DESC"
+ "sort_order": "DESC",
+ "title_field": "location_name",
+ "show_title_field_in_link": 1,
+ "search_fields": "location_name,address_line1,city"
 }
