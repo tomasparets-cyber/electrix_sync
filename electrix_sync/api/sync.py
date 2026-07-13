@@ -417,8 +417,8 @@ def sync_event(item, event_type_names=None):
 
         doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
         doc.event_type = "Private"
-        doc.starts_on = normalize_stel_event_datetime(get_first(item, "start-date", "startDate", "date"))
-        doc.ends_on = normalize_stel_event_datetime(get_first(item, "end-date", "endDate", "start-date", "startDate", "date"))
+        doc.starts_on = normalize_datetime(get_first(item, "start-date", "startDate", "date"))
+        doc.ends_on = normalize_datetime(get_first(item, "end-date", "endDate", "start-date", "startDate", "date"))
         if has_field(doc, "all_day"):
             doc.all_day = 1 if get_first(item, "all-day", "allDay") is True else 0
         if has_field(doc, "status"):
@@ -1132,25 +1132,6 @@ def normalize_datetime(value):
     except Exception:
         value = str(value).strip().replace("T", " ")
         return value[:19]
-
-
-def normalize_stel_event_datetime(value):
-    """Preserve STEL's calendar wall time when storing an ERPNext Event.
-
-    STEL serializes calendar values with a numeric offset, but its agenda and
-    API use the clock component as the scheduled local time. Converting that
-    value a second time to the ERPNext timezone caused a two-hour shift during
-    Europe/Madrid daylight-saving time (14:00 in STEL became 16:00 here).
-    """
-    if not value:
-        return now()
-    try:
-        parsed = get_datetime(value)
-        if parsed.tzinfo is not None:
-            parsed = parsed.replace(tzinfo=None)
-        return parsed.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return str(value).strip().replace("T", " ")[:19]
 
 
 def get_valid_email(value):
