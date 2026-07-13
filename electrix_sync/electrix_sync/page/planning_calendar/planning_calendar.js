@@ -34,6 +34,7 @@ class ElectrixPlanningCalendar {
 	shift(days) { this.startDate = frappe.datetime.add_days(this.startDate, days); this.load(); }
 
 	async load() {
+		this.closeActionsMenu();
 		this.page.main.html(`<div class="planning-loading">${__("Cargando calendario…")}</div>`);
 		const response = await frappe.call({ method: "electrix_sync.api.planning.get_board", args: { start_date: this.startDate, days: 7 } });
 		this.data = response.message;
@@ -92,7 +93,7 @@ class ElectrixPlanningCalendar {
 				const height = Math.max((end - start) * 0.8, 20);
 				const width = 94 / Math.max(employees.length, 1);
 				cards.push(`<div class="pc-event" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
-					<button class="pc-duplicate" title="${__("Duplicar evento")}">${frappe.utils.icon("copy", "xs")}</button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
+					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
 				</div>`);
 			});
 		}
@@ -101,7 +102,7 @@ class ElectrixPlanningCalendar {
 
 	bind() {
 		this.page.main.find(".pc-event").on("pointerdown", (event) => {
-			if ($(event.target).closest(".pc-resize,.pc-duplicate").length) return;
+			if ($(event.target).closest(".pc-resize,.pc-actions-toggle").length) return;
 			this.startMove(event);
 		});
 		this.page.main.find(".pc-event").on("click", (event) => {
@@ -109,7 +110,7 @@ class ElectrixPlanningCalendar {
 			frappe.set_route("Form", "Event", event.currentTarget.dataset.event);
 		});
 		this.page.main.find(".pc-resize").on("pointerdown", (event) => this.startResize(event));
-		this.page.main.find(".pc-duplicate").on("click", (event) => this.duplicateEvent(event));
+		this.page.main.find(".pc-actions-toggle").on("click", (event) => this.showActionsMenu(event));
 	}
 
 	startMove(event) {
@@ -157,11 +158,49 @@ class ElectrixPlanningCalendar {
 		document.addEventListener("pointermove", move); document.addEventListener("pointerup", up, { once: true });
 	}
 
-	async duplicateEvent(event) {
+	showActionsMenu(event) {
 		event.preventDefault(); event.stopPropagation();
-		const card = event.currentTarget.closest(".pc-event");
-		await frappe.call({ method: "electrix_sync.api.planning.duplicate_event", args: { event_name: card.dataset.event }, freeze: true, freeze_message: __("Duplicando evento…") });
+		this.closeActionsMenu();
+		const button = event.currentTarget;
+		const eventName = button.closest(".pc-event").dataset.event;
+		const rect = button.getBoundingClientRect();
+		this.actionsMenu = $(`<div class="pc-event-actions-menu" role="menu">
+			<button type="button" data-action="duplicate" role="menuitem">${frappe.utils.icon("copy", "sm")}<span>${__("Duplicar")}</span></button>
+			<button type="button" data-action="unplan" role="menuitem">${frappe.utils.icon("calendar", "sm")}<span>${__("Desprogramar")}</span></button>
+		</div>`).appendTo(document.body);
+		const width = this.actionsMenu.outerWidth();
+		const height = this.actionsMenu.outerHeight();
+		this.actionsMenu.css({
+			left: `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))}px`,
+			top: `${Math.max(8, Math.min(window.innerHeight - height - 8, rect.bottom + 4))}px`,
+		});
+		this.actionsMenu.on("click", (menuEvent) => menuEvent.stopPropagation());
+		this.actionsMenu.find('[data-action="duplicate"]').on("click", async () => {
+			this.closeActionsMenu();
+			await this.duplicateEvent(eventName);
+		});
+		this.actionsMenu.find('[data-action="unplan"]').on("click", async () => {
+			this.closeActionsMenu();
+			await this.unplanEvent(eventName);
+		});
+		setTimeout(() => $(document).one("click.pc-event-actions", () => this.closeActionsMenu()), 0);
+	}
+
+	closeActionsMenu() {
+		$(document).off("click.pc-event-actions");
+		this.actionsMenu?.remove();
+		this.actionsMenu = null;
+	}
+
+	async duplicateEvent(eventName) {
+		await frappe.call({ method: "electrix_sync.api.planning.duplicate_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Duplicando evento…") });
 		frappe.show_alert({ message: __("Evento duplicado"), indicator: "green" });
+		await this.load();
+	}
+
+	async unplanEvent(eventName) {
+		await frappe.call({ method: "electrix_sync.api.planning.unplan_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Desprogramando evento…") });
+		frappe.show_alert({ message: __("Evento desprogramado"), indicator: "green" });
 		await this.load();
 	}
 
