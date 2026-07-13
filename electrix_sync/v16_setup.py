@@ -320,13 +320,21 @@ def add_projects_sidebar_items():
             if row:
                 by_name[row.name] = row
 
-    desired_links = (
+    configured_links = (
         {"label": "Home", "link_type": "Workspace", "link_to": "Projects", "icon": "home"},
         {"label": "Tablero", "link_type": "Page", "link_to": "project-dashboard", "icon": "bar-chart-2"},
         {"label": "Lugar", "link_type": "DocType", "link_to": "Lugar", "icon": "map-pin"},
         {"label": "Project", "link_type": "DocType", "link_to": "Project", "icon": "briefcase"},
         {"label": "Task", "link_type": "DocType", "link_to": "Task", "icon": "list-checks"},
         {"label": "Event", "link_type": "DocType", "link_to": "Event", "icon": "calendar-days"},
+    )
+    # ERPNext may remove or rename standard pages between v16 releases. A
+    # missing optional destination (currently project-dashboard in some
+    # builds) must not prevent the remaining sidebar entries from being
+    # restored. Workspace Sidebar validates every Link while it is inserted.
+    desired_links = tuple(
+        row for row in configured_links
+        if frappe.db.exists(row["link_type"], row["link_to"])
     )
     updated = []
     for sidebar_name in by_name:
@@ -386,14 +394,14 @@ def add_projects_sidebar_items():
             section = frappe.get_doc({
                 "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                 "parenttype": "Workspace Sidebar", "parentfield": "items",
-                "idx": 7, "label": "Planificación", "type": "Section Break",
+                "idx": len(desired_links) + 1, "label": "Planificación", "type": "Section Break",
                 "collapsible": 1, "indent": 1, "show_arrow": 1, "keep_closed": 1,
             }).insert(ignore_permissions=True)
             ordered_names.append(section.name)
             for idx, item_data in enumerate((
                 {"label": "Tabla", "link_type": "Page", "link_to": "planning", "icon": "table"},
                 {"label": "Calendario", "link_type": "Page", "link_to": "planning-calendar", "icon": "calendar"},
-            ), start=8):
+            ), start=len(desired_links) + 2):
                 row = frappe.get_doc({
                     "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                     "parenttype": "Workspace Sidebar", "parentfield": "items",
@@ -402,7 +410,7 @@ def add_projects_sidebar_items():
                 ordered_names.append(row.name)
 
             remaining = [row for row in items if row.name not in ordered_names and frappe.db.exists("Workspace Sidebar Item", row.name)]
-            for idx, row in enumerate(remaining, start=10):
+            for idx, row in enumerate(remaining, start=len(desired_links) + 4):
                 frappe.db.set_value("Workspace Sidebar Item", row.name, "idx", idx, update_modified=False)
             updated.append({"sidebar": sidebar_name, "order": [row["label"] for row in desired_links] + ["Planificación", "Tabla", "Calendario"]})
         except Exception:
