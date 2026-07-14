@@ -2,6 +2,24 @@ frappe.ui.form.on("Event", {
 	refresh(frm) {
 		render_event_datetime_selectors(frm);
 	},
+	async after_save(frm) {
+		if (frm.__electrix_syncing_event || (!frm.doc.custom_stel_id && !frm.doc.custom_stel_calendar_id)) return;
+		frm.__electrix_syncing_event = true;
+		try {
+			await frappe.call({
+				method: "electrix_sync.api.outbound_sync.sync_event_now",
+				args: { event_name: frm.doc.name },
+				freeze: true,
+				freeze_message: __("Sincronizando evento con STEL…"),
+			});
+			frappe.show_alert({ message: __("Evento sincronizado con STEL"), indicator: "green" });
+		} catch (error) {
+			frappe.show_alert({ message: __("No se pudo sincronizar el evento con STEL"), indicator: "red" }, 7);
+			throw error;
+		} finally {
+			frm.__electrix_syncing_event = false;
+		}
+	},
 	starts_on(frm) {
 		setTimeout(() => render_event_datetime_selector(frm, "starts_on", __("Fecha de inicio"), __("Hora de inicio")), 0);
 	},

@@ -69,6 +69,20 @@ def push_document(doctype, name):
         raise
 
 
+@frappe.whitelist()
+def sync_event_now(event_name):
+    """Push an Event synchronously so a subsequent refresh cannot restore stale STEL data."""
+    doc = frappe.get_doc("Event", event_name)
+    doc.check_permission("write")
+    if not doc.get("custom_stel_id") and not doc.get("custom_stel_calendar_id"):
+        return {"synced": False, "reason": "not_linked"}
+    push_document("Event", doc.name)
+    return {
+        "synced": True,
+        "stel_id": frappe.db.get_value("Event", doc.name, "custom_stel_id"),
+    }
+
+
 def push_task(doc):
     payload = {
         "description": (strip_html(doc.description) or doc.subject or doc.name)[:2048],
