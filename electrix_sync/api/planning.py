@@ -89,7 +89,8 @@ def repair_calendar_assignments(refresh=False):
     # Calendars and events are rebuilt from the most recent immutable staging
     # snapshot instead.
     refresh = str(refresh).lower() in {"1", "true", "yes"}
-    calendars = StelClient().get_calendars() if refresh else [row["data"] for row in get_staged("calendars")]
+    client = StelClient() if refresh else None
+    calendars = client.get_calendars() if client else [row["data"] for row in get_staged("calendars")]
     employees = frappe.get_all(
         "Employee",
         filters={"status": "Active"},
@@ -116,7 +117,10 @@ def repair_calendar_assignments(refresh=False):
         employee_by_calendar[str(calendar_id)] = employee.name
         mapped_employees += 1
 
-    staged_events = [row["data"] for row in get_staged("events")]
+    # A manual calendar repair must also reload events. Otherwise already
+    # imported rows retain historical timezone conversions forever because the
+    # incremental job only requests records modified after its last cursor.
+    staged_events = client.get_events() if client else [row["data"] for row in get_staged("events")]
     event_type_names = get_catalog_names([row["data"] for row in get_staged("event_types")])
     stel_events = {str(get_stel_id(row)): row for row in staged_events if get_stel_id(row)}
     erp_events = frappe.get_all(
