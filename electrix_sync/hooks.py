@@ -13,6 +13,10 @@ app_include_css = [
     "/assets/electrix_sync/css/planning_calendar.css",
 ]
 
+doctype_js = {
+    "Event": "public/js/event.js",
+}
+
 doc_events = {
     "Lugar": {
         "validate": "electrix_sync.api.locations.validate_lugar",

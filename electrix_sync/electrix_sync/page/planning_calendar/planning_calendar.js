@@ -141,7 +141,7 @@ class ElectrixPlanningCalendar {
 		});
 		this.page.main.find(".pc-event").on("click", (event) => {
 			if (this.didManipulate) { this.didManipulate = false; return; }
-			frappe.set_route("Form", "Event", event.currentTarget.dataset.event);
+			this.editEvent(event.currentTarget.dataset.event);
 		});
 		this.page.main.find(".pc-resize").on("pointerdown", (event) => this.startResize(event));
 		this.page.main.find(".pc-actions-toggle").on("click", (event) => this.showActionsMenu(event));
@@ -226,14 +226,83 @@ class ElectrixPlanningCalendar {
 		this.actionsMenu = null;
 	}
 
-	async duplicateEvent(eventName) {
+	editEvent(eventName) {
+		const source = this.data.events.find((row) => row.name === eventName);
+		if (!source) return;
+		const dialog = new frappe.ui.Dialog({
+			title: __("Editar evento"),
+			fields: [
+				...this.eventFields(source),
+				{ fieldtype: "Button", fieldname: "duplicate", label: __("Duplicar evento"), click: () => this.duplicateEvent(source.name, dialog) },
+				{ fieldtype: "Button", fieldname: "unplan", label: __("Pasar a sin programar"), click: () => this.unplanEvent(source.name, dialog) },
+			],
+			primary_action_label: __("Guardar"),
+			primary_action: async (values) => {
+				delete values.duplicate;
+				delete values.unplan;
+				await frappe.call({
+					method: "electrix_sync.api.planning.edit_planned_event",
+					args: { event_name: source.name, ...this.eventPayload(values) },
+					freeze: true,
+					freeze_message: __("Actualizando ERPNext y STEL…"),
+				});
+				dialog.hide();
+				await this.load();
+			},
+		});
+		dialog.show();
+	}
+
+	eventFields(source) {
+		const start = this.splitDateTime(source.starts_on);
+		const end = this.splitDateTime(source.ends_on);
+		const times = this.timeOptions();
+		return [
+			{ fieldtype: "Data", fieldname: "subject", label: __("Asunto"), reqd: 1, default: source.subject || "" },
+			{ fieldtype: "Small Text", fieldname: "description", label: __("Descripción"), default: source.description || "" },
+			{ fieldtype: "Data", fieldname: "location", label: __("Ubicación"), default: source.location || "" },
+			{ fieldtype: "Section Break" },
+			{ fieldtype: "Date", fieldname: "start_date", label: __("Fecha de inicio"), reqd: 1, default: start.date },
+			{ fieldtype: "Select", fieldname: "start_time", label: __("Hora de inicio"), reqd: 1, options: times, default: start.time },
+			{ fieldtype: "Column Break" },
+			{ fieldtype: "Date", fieldname: "end_date", label: __("Fecha de fin"), reqd: 1, default: end.date },
+			{ fieldtype: "Select", fieldname: "end_time", label: __("Hora de fin"), reqd: 1, options: times, default: end.time },
+			{ fieldtype: "Section Break" },
+			{ fieldtype: "Select", fieldname: "event_category", label: __("Categoría"), options: "Event\nMeeting\nCall\nSent/Received Email\nOther", default: source.event_category || "Event" },
+			{ fieldtype: "Select", fieldname: "status", label: __("Estado"), options: "Open\nClosed\nCancelled", default: source.status || "Open" },
+			{ fieldtype: "Link", fieldname: "employee", label: __("Empleado"), options: "Employee", reqd: 1, default: source.custom_assigned_employee || (source.assigned_employees || [])[0] },
+		];
+	}
+
+	eventPayload(values) {
+		const payload = { ...values };
+		payload.starts_on = `${payload.start_date} ${payload.start_time}:00`;
+		payload.ends_on = `${payload.end_date} ${payload.end_time}:00`;
+		delete payload.start_date; delete payload.start_time; delete payload.end_date; delete payload.end_time;
+		return payload;
+	}
+
+	splitDateTime(value) {
+		const text = String(value || `${frappe.datetime.get_today()} 08:00:00`);
+		const minute = Math.round(Number(text.slice(14, 16) || 0) / 15) * 15;
+		const hour = Number(text.slice(11, 13) || 0) + Math.floor(minute / 60);
+		return { date: text.slice(0, 10), time: `${String(hour % 24).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}` };
+	}
+
+	timeOptions() {
+		return Array.from({ length: 96 }, (_, index) => `${String(Math.floor(index / 4)).padStart(2, "0")}:${String((index % 4) * 15).padStart(2, "0")}`).join("\n");
+	}
+
+	async duplicateEvent(eventName, dialog) {
 		await frappe.call({ method: "electrix_sync.api.planning.duplicate_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Duplicando evento…") });
+		dialog?.hide();
 		frappe.show_alert({ message: __("Evento duplicado"), indicator: "green" });
 		await this.load();
 	}
 
-	async unplanEvent(eventName) {
+	async unplanEvent(eventName, dialog) {
 		await frappe.call({ method: "electrix_sync.api.planning.unplan_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Desprogramando evento…") });
+		dialog?.hide();
 		frappe.show_alert({ message: __("Evento desprogramado"), indicator: "green" });
 		await this.load();
 	}
