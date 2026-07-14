@@ -864,15 +864,44 @@ def build_event_description(item):
 def sync_deleted_event(stel_id, item):
     event_name = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name")
     if event_name:
-        values = {"custom_stel_last_sync": now(), "custom_stel_sync_status": "Skipped"}
-        if frappe.get_meta("Event").has_field("status"):
-            values["status"] = "Cancelled"
-        frappe.db.set_value("Event", event_name, values, update_modified=False)
-        log_sync("Event", "Skipped", stel_id, "Event", event_name, "STEL event is deleted", payload=item)
+        delete_stel_event_from_erp(event_name)
+        log_sync("Event", "Success", stel_id, "Event", event_name, "Deleted because STEL event is deleted", payload=item)
         return "updated"
 
     log_sync("Event", "Skipped", stel_id, message="STEL event is deleted", payload=item)
     return "skipped"
+
+
+def delete_missing_stel_events(items, calendar_ids=None):
+    """Delete linked ERP events absent from a complete STEL event snapshot."""
+    live_ids = {
+        str(get_stel_id(item))
+        for item in items
+        if get_stel_id(item) and item.get("deleted") is not True
+    }
+    filters = {"custom_stel_id": ["is", "set"]}
+    if calendar_ids is not None:
+        calendar_ids = [str(value) for value in calendar_ids if value not in (None, "")]
+        if not calendar_ids:
+            return 0
+        filters["custom_stel_calendar_id"] = ["in", calendar_ids]
+    linked = frappe.get_all("Event", filters=filters, fields=["name", "custom_stel_id"])
+    deleted = 0
+    for event in linked:
+        if str(event.custom_stel_id) in live_ids:
+            continue
+        delete_stel_event_from_erp(event.name)
+        deleted += 1
+    return deleted
+
+
+def delete_stel_event_from_erp(event_name):
+    previous_flag = getattr(frappe.flags, "in_stel_sync", False)
+    frappe.flags.in_stel_sync = True
+    try:
+        frappe.delete_doc("Event", event_name, ignore_permissions=True)
+    finally:
+        frappe.flags.in_stel_sync = previous_flag
 
 
 def sync_deleted_incident(stel_id, item):

@@ -10,6 +10,7 @@ from electrix_sync.api.stel import StelClient
 from electrix_sync.api.sync import (
     get_catalog_names,
     get_event_status,
+    delete_missing_stel_events,
     get_stel_id,
     match_employee_calendar,
     normalize_stel_event_datetime,
@@ -163,10 +164,15 @@ def repair_calendar_assignments(refresh=False):
         if planning_status != "Unplanned":
             mapped_events += 1
 
+    deleted_events = 0
+    if client:
+        deleted_events = delete_missing_stel_events(staged_events, employee_by_calendar.keys())
+
     frappe.db.commit()
     return {
         "employees": mapped_employees,
         "events": mapped_events,
+        "deleted_events": deleted_events,
         "calendars": len(calendars),
         "unmatched": unmatched_employees,
         "source": "STEL API" if refresh else "staging",
