@@ -127,7 +127,7 @@ class ElectrixPlanningCalendar {
 				const height = Math.max((end - start) * 0.8, 20);
 				const width = 94 / Math.max(employees.length, 1);
 				cards.push(`<div class="pc-event" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
-					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
+					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
 				</div>`);
 			});
 		}
@@ -194,13 +194,21 @@ class ElectrixPlanningCalendar {
 
 	showActionsMenu(event) {
 		event.preventDefault(); event.stopPropagation();
-		this.closeActionsMenu();
 		const button = event.currentTarget;
 		const eventName = button.closest(".pc-event").dataset.event;
+		if (this.actionsButton === button) {
+			this.closeActionsMenu();
+			return;
+		}
+		this.closeActionsMenu();
+		this.actionsEventName = eventName;
+		this.actionsButton = button;
+		button.setAttribute("aria-expanded", "true");
 		const rect = button.getBoundingClientRect();
 		this.actionsMenu = $(`<div class="pc-event-actions-menu" role="menu">
 			<button type="button" data-action="duplicate" role="menuitem">${frappe.utils.icon("copy", "sm")}<span>${__("Duplicar")}</span></button>
 			<button type="button" data-action="unplan" role="menuitem">${frappe.utils.icon("calendar", "sm")}<span>${__("Desprogramar")}</span></button>
+			<button type="button" data-action="delete" role="menuitem">${frappe.utils.icon("delete", "sm")}<span>${__("Eliminar")}</span></button>
 		</div>`).appendTo(document.body);
 		const width = this.actionsMenu.outerWidth();
 		const height = this.actionsMenu.outerHeight();
@@ -217,13 +225,20 @@ class ElectrixPlanningCalendar {
 			this.closeActionsMenu();
 			await this.unplanEvent(eventName);
 		});
+		this.actionsMenu.find('[data-action="delete"]').on("click", () => {
+			this.closeActionsMenu();
+			this.deleteEvent(eventName);
+		});
 		setTimeout(() => $(document).one("click.pc-event-actions", () => this.closeActionsMenu()), 0);
 	}
 
 	closeActionsMenu() {
 		$(document).off("click.pc-event-actions");
 		this.actionsMenu?.remove();
+		this.actionsButton?.setAttribute("aria-expanded", "false");
 		this.actionsMenu = null;
+		this.actionsButton = null;
+		this.actionsEventName = null;
 	}
 
 	editEvent(eventName) {
@@ -305,6 +320,15 @@ class ElectrixPlanningCalendar {
 		dialog?.hide();
 		frappe.show_alert({ message: __("Evento desprogramado"), indicator: "green" });
 		await this.load();
+	}
+
+	deleteEvent(eventName, dialog) {
+		frappe.confirm(__("¿Eliminar esta cita de ERPNext y STEL Order?"), async () => {
+			await frappe.call({ method: "electrix_sync.api.planning.delete_planned_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Eliminando evento…") });
+			dialog?.hide();
+			frappe.show_alert({ message: __("Evento eliminado"), indicator: "green" });
+			await this.load();
+		});
 	}
 
 	async persistTime(eventName, startsOn, endsOn) {

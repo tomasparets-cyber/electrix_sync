@@ -56,6 +56,7 @@ class ElectrixPlanning {
 	}
 
 	async load() {
+		this.closeActionsMenu();
 		this.page.main.html(`<div class="planning-loading">${__("Cargando planificación…")}</div>`);
 		const response = await frappe.call({
 			method: "electrix_sync.api.planning.get_board",
@@ -115,6 +116,7 @@ class ElectrixPlanning {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
 		const metadata = [event.event_category, event.status || "Open"].filter(Boolean).join(" · ");
 		return `<article class="planning-event ${backlog ? "is-backlog" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
+			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
 			<strong>${this.escape(event.subject || event.name)}</strong>
 			<span>${this.escape(metadata)}${backlog ? "" : ` · ${this.timeLabel(event.starts_on, event.ends_on)}`}</span>
 			<small>${duration}h</small>
@@ -128,8 +130,10 @@ class ElectrixPlanning {
 			event.originalEvent.dataTransfer.setData("text/plain", this.draggedEvent);
 		}).on("dragend", () => setTimeout(() => { this.wasDragging = false; }, 50))
 			.on("click", (event) => {
+				if ($(event.target).closest(".pc-actions-toggle").length) return;
 				if (!this.wasDragging) this.editEvent(event.currentTarget.dataset.event);
 			});
+		this.page.main.find(".pc-actions-toggle").on("click", (event) => this.showActionsMenu(event));
 		this.page.main.find(".planning-cell").on("dragover", (event) => {
 			event.preventDefault();
 			event.currentTarget.classList.add("is-over");
@@ -149,6 +153,46 @@ class ElectrixPlanning {
 				card.style.display = card.dataset.search.includes(value) ? "" : "none";
 			});
 		});
+	}
+
+	showActionsMenu(event) {
+		event.preventDefault(); event.stopPropagation();
+		const button = event.currentTarget;
+		const eventName = button.closest(".planning-event").dataset.event;
+		if (this.actionsButton === button) {
+			this.closeActionsMenu();
+			return;
+		}
+		this.closeActionsMenu();
+		this.actionsEventName = eventName;
+		this.actionsButton = button;
+		button.setAttribute("aria-expanded", "true");
+		const rect = button.getBoundingClientRect();
+		this.actionsMenu = $(`<div class="pc-event-actions-menu" role="menu">
+			<button type="button" data-action="duplicate" role="menuitem">${frappe.utils.icon("copy", "sm")}<span>${__("Duplicar")}</span></button>
+			<button type="button" data-action="unplan" role="menuitem">${frappe.utils.icon("calendar", "sm")}<span>${__("Desprogramar")}</span></button>
+			<button type="button" data-action="delete" role="menuitem">${frappe.utils.icon("delete", "sm")}<span>${__("Eliminar")}</span></button>
+		</div>`).appendTo(document.body);
+		const width = this.actionsMenu.outerWidth();
+		const height = this.actionsMenu.outerHeight();
+		this.actionsMenu.css({
+			left: `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))}px`,
+			top: `${Math.max(8, Math.min(window.innerHeight - height - 8, rect.bottom + 4))}px`,
+		});
+		this.actionsMenu.on("click", (menuEvent) => menuEvent.stopPropagation());
+		this.actionsMenu.find('[data-action="duplicate"]').on("click", async () => { this.closeActionsMenu(); await this.duplicateEvent(eventName); });
+		this.actionsMenu.find('[data-action="unplan"]').on("click", async () => { this.closeActionsMenu(); await this.unplanEvent(eventName); });
+		this.actionsMenu.find('[data-action="delete"]').on("click", () => { this.closeActionsMenu(); this.deleteEvent(eventName); });
+		setTimeout(() => $(document).one("click.pc-event-actions", () => this.closeActionsMenu()), 0);
+	}
+
+	closeActionsMenu() {
+		$(document).off("click.pc-event-actions");
+		this.actionsMenu?.remove();
+		this.actionsButton?.setAttribute("aria-expanded", "false");
+		this.actionsMenu = null;
+		this.actionsButton = null;
+		this.actionsEventName = null;
 	}
 
 	createInCell(cell) {
@@ -257,6 +301,15 @@ class ElectrixPlanning {
 		});
 		dialog?.hide();
 		await this.load();
+	}
+
+	deleteEvent(eventName, dialog) {
+		frappe.confirm(__("¿Eliminar esta cita de ERPNext y STEL Order?"), async () => {
+			await frappe.call({ method: "electrix_sync.api.planning.delete_planned_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Eliminando evento…") });
+			dialog?.hide();
+			frappe.show_alert({ message: __("Evento eliminado"), indicator: "green" });
+			await this.load();
+		});
 	}
 
 	async dropToBacklog(event) {

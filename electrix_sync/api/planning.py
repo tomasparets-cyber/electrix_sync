@@ -299,6 +299,15 @@ def unplan_event(event_name):
 
 
 @frappe.whitelist()
+def delete_planned_event(event_name):
+    event = frappe.get_doc("Event", event_name)
+    event.check_permission("delete")
+    frappe.delete_doc("Event", event.name)
+    frappe.db.commit()
+    return {"name": event.name}
+
+
+@frappe.whitelist()
 def resize_event(event_name, starts_on, ends_on):
     event = frappe.get_doc("Event", event_name)
     event.check_permission("write")
