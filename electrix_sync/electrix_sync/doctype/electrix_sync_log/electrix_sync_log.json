@@ -43,9 +43,8 @@
     },
     {
       "fieldname": "erpnext_document",
-      "fieldtype": "Dynamic Link",
-      "label": "ERPNext Document",
-      "options": "erpnext_doctype"
+      "fieldtype": "Data",
+      "label": "ERPNext Document"
     },
     {
       "fieldname": "message",

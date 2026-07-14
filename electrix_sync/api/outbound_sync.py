@@ -16,6 +16,23 @@ def enqueue_event(doc, method=None):
     enqueue_document("Event", doc)
 
 
+def delete_event(doc, method=None):
+    """Delete the STEL copy without preventing the ERPNext deletion.
+
+    An unavailable or already deleted remote event must not leave an Event
+    permanently undeletable in ERPNext.
+    """
+    if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
+        return
+    stel_id = doc.get("custom_stel_id")
+    if not stel_id:
+        return
+    try:
+        StelClient().delete_event(stel_id)
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), f"Could not delete STEL Event {stel_id}")
+
+
 def normalize_event(doc, method=None):
     doc.status = doc.status if doc.status in {"Open", "Closed", "Cancelled"} else "Open"
     doc.custom_planning_status = "Completed" if doc.status == "Closed" else (
