@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+from electrix_sync.api.planning import stel_datetime
 from electrix_sync.api.sync import (
     get_catalog_names,
     get_event_status,
@@ -14,6 +17,7 @@ from electrix_sync.api.sync import (
     get_task_priority,
     get_task_status,
     match_employee_calendar,
+    normalize_datetime,
 )
 
 
@@ -104,3 +108,17 @@ def test_event_states_preserve_stel_vocabulary():
     assert get_event_status({"event-state": "PENDING"}) == "Open"
     assert get_event_status({"event-state": "COMPLETED"}) == "Closed"
     assert get_event_status({"event-state": "REFUSED"}) == "Cancelled"
+
+
+def test_stel_event_datetimes_are_converted_to_madrid_local_time():
+    with patch("electrix_sync.api.sync.get_system_timezone", return_value="Europe/Madrid"):
+        assert normalize_datetime("2026-07-14T12:00:00Z") == "2026-07-14 14:00:00"
+        assert normalize_datetime("2026-07-14T14:00:00+02:00") == "2026-07-14 14:00:00"
+        assert normalize_datetime("2026-01-14T13:00:00Z") == "2026-01-14 14:00:00"
+        assert normalize_datetime("2026-01-14T14:00:00+01:00") == "2026-01-14 14:00:00"
+
+
+def test_erp_event_datetimes_include_the_madrid_dst_offset_for_stel():
+    with patch("electrix_sync.api.planning.get_system_timezone", return_value="Europe/Madrid"):
+        assert stel_datetime("2026-07-14 14:00:00") == "2026-07-14T14:00:00+0200"
+        assert stel_datetime("2026-01-14 14:00:00") == "2026-01-14T14:00:00+0100"
