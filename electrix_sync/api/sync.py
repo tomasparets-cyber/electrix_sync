@@ -417,8 +417,8 @@ def sync_event(item, event_type_names=None):
 
         doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
         doc.event_type = "Private"
-        doc.starts_on = normalize_datetime(get_first(item, "start-date", "startDate", "date"))
-        doc.ends_on = normalize_datetime(get_first(item, "end-date", "endDate", "start-date", "startDate", "date"))
+        doc.starts_on = normalize_stel_event_datetime(get_first(item, "start-date", "startDate", "date"))
+        doc.ends_on = normalize_stel_event_datetime(get_first(item, "end-date", "endDate", "start-date", "startDate", "date"))
         if has_field(doc, "all_day"):
             doc.all_day = 1 if get_first(item, "all-day", "allDay") is True else 0
         if has_field(doc, "status"):
@@ -1132,6 +1132,25 @@ def normalize_datetime(value):
     except Exception:
         value = str(value).strip().replace("T", " ")
         return value[:19]
+
+
+def normalize_stel_event_datetime(value):
+    """Preserve the calendar clock value returned by STEL.
+
+    STEL event timestamps carry an offset, but the clock component is already
+    the time shown in its calendar. Converting it as an instant shifts events
+    by two hours during Europe/Madrid daylight-saving time.
+    """
+    if not value:
+        return now()
+    if isinstance(value, str):
+        clock_value = value.strip().replace("T", " ")
+        if len(clock_value) >= 19:
+            return clock_value[:19]
+    try:
+        return get_datetime(value).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(value).strip().replace("T", " ")[:19]
 
 
 def get_valid_email(value):
