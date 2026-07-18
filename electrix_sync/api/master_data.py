@@ -212,7 +212,6 @@ def import_place(row):
             "country": resolve_country(data.get("country-code")),
             "latitude": data.get("latitude"),
             "longitude": data.get("longitude"),
-            "sync_policy": "Recibir de STEL",
         })
     if not link:
         link = doc.append("stel_links", {})
@@ -225,6 +224,7 @@ def import_place(row):
     link.sync_enabled = 0
     link.sync_status = "Linked" if customer else "Local"
     link.last_sync = now()
+    doc.flags.skip_stel_outbound = True
     doc.save(ignore_permissions=True) if existing_parent else doc.insert(ignore_permissions=True)
     return "updated" if existing_parent else "created"
 

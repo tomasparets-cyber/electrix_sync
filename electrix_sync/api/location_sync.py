@@ -12,7 +12,7 @@ def enqueue_location(doc, method=None):
     """Synchronize ERPNext-owned locations without echoing inbound STEL writes."""
     if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
         return
-    if doc.get("sync_policy") != "Bidireccional" or not doc.get("owner_customer"):
+    if not doc.get("owner_customer"):
         return
     frappe.enqueue(
         "electrix_sync.api.location_sync.push_location",
@@ -25,8 +25,6 @@ def enqueue_location(doc, method=None):
 def push_location(place_name):
     """Ensure the owner copy exists and update every existing STEL copy."""
     place = frappe.get_doc("Lugar", place_name)
-    if place.sync_policy != "Bidireccional":
-        return {"skipped": True, "reason": "policy"}
     owner_link = ensure_stel_location_link(place.name, place.owner_customer)
     updated = []
     client = StelClient()

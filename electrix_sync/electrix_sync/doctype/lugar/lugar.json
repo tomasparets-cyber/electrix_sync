@@ -5,7 +5,7 @@
  "custom": 1,
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["location_name", "owner_customer", "location_key", "status", "address_section", "address_line1", "address_line2", "postal_code", "city", "province", "country", "coordinates_section", "latitude", "longitude", "sync_section", "sync_policy", "stel_links"],
+ "field_order": ["location_name", "owner_customer", "location_key", "status", "address_section", "address_line1", "address_line2", "postal_code", "city", "province", "country", "coordinates_section", "latitude", "longitude", "sync_section", "stel_links"],
  "fields": [
   {"fieldname": "location_name", "fieldtype": "Data", "label": "Nombre del lugar", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
   {"fieldname": "owner_customer", "fieldtype": "Link", "label": "Cliente propietario", "options": "Customer", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
@@ -22,7 +22,6 @@
   {"fieldname": "latitude", "fieldtype": "Float", "label": "Latitud"},
   {"fieldname": "longitude", "fieldtype": "Float", "label": "Longitud"},
   {"fieldname": "sync_section", "fieldtype": "Section Break", "label": "STEL Order"},
-  {"default": "Bidireccional", "fieldname": "sync_policy", "fieldtype": "Select", "label": "Política de sincronización", "options": "Solo ERPNext\nRecibir de STEL\nBidireccional", "reqd": 1, "in_standard_filter": 1},
   {"fieldname": "stel_links", "fieldtype": "Table", "label": "Vínculos STEL por cliente", "options": "Lugar STEL Link"}
  ],
  "index_web_pages_for_search": 0,
