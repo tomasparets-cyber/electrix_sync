@@ -125,17 +125,15 @@ def mirror_place_to_primary_address(place, stel_address_id):
 
 
 def enqueue_location(doc, method=None):
-    """Synchronize ERPNext-owned locations without echoing inbound STEL writes."""
+    """Synchronize ERPNext-owned locations without hiding STEL write errors."""
     if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
         return
     if not doc.get("owner_customer"):
         return
-    frappe.enqueue(
-        "electrix_sync.api.location_sync.push_location",
-        queue="short",
-        enqueue_after_commit=True,
-        place_name=doc.name,
-    )
+    # Location edits are interactive and must not appear successful when the
+    # background worker later rejects the STEL request. Run the small outbound
+    # write now so Desk reports the real API error to the user immediately.
+    push_location(doc.name)
 
 
 def push_location(place_name):
