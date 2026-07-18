@@ -35,6 +35,10 @@ def push_location(place_name):
     for link in place.stel_links:
         if not link.stel_address_id:
             continue
+        # STEL's addresses endpoint explicitly rejects updates to DEFAULT.
+        # It remains usable as an address-id and authoritative on inbound sync.
+        if str(link.get("stel_address_type") or "").upper() == "DEFAULT":
+            continue
         client.update_address(link.stel_address_id, payload)
         frappe.db.set_value("Lugar STEL Link", link.name, {
             "payload_hash": location_payload_hash(payload),
@@ -82,6 +86,7 @@ def ensure_stel_location_link(place_name, customer):
     link.customer = customer
     link.stel_customer_id = str(stel_customer_id)
     link.stel_address_id = str(address_id)
+    link.stel_address_type = str(remote.get("address-type") or "OTHER").upper() if isinstance(remote, dict) else "OTHER"
     link.is_owner_link = 1 if customer == place.owner_customer else 0
     link.payload_hash = location_payload_hash(location_payload(place))
     link.sync_enabled = 1

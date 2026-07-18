@@ -43,7 +43,7 @@ def run_customer_import():
     )
     process_rows(
         "places",
-        [row for row in staged["addresses"] if address_destination(row["data"]) == "Lugar"],
+        [row for row in staged["addresses"] if address_creates_place(row["data"])],
         import_place,
         summary,
     )
@@ -192,7 +192,7 @@ def import_place(row):
     doc = frappe.get_doc("Lugar", existing_parent) if existing_parent else frappe.new_doc("Lugar")
     customer = customer_for_account(data.get("account-id"))
     link = next((x for x in doc.stel_links if str(x.stel_address_id) == row["remote_id"]), None)
-    if link and link.payload_hash == row["payload_hash"]:
+    if link and link.payload_hash == row["payload_hash"] and link.get("stel_address_type"):
         return "unchanged"
     if not doc.get("owner_customer") and customer:
         doc.owner_customer = customer
@@ -219,6 +219,7 @@ def import_place(row):
     link.customer = customer
     link.stel_customer_id = str(data.get("account-id")) if data.get("account-id") is not None else None
     link.stel_address_id = row["remote_id"]
+    link.stel_address_type = (data.get("address-type") or "OTHER").upper()
     link.is_owner_link = 1 if is_owner_copy else 0
     link.payload_hash = row["payload_hash"]
     link.sync_enabled = 0
@@ -349,10 +350,10 @@ def preview_customer_import():
             staged_client_ids,
         ),
         "places": preview_places(
-            [row for row in staged["addresses"] if address_destination(row["data"]) == "Lugar"]
+            [row for row in staged["addresses"] if address_creates_place(row["data"])]
         ),
         "unclassified_addresses": len(
-            [row for row in staged["addresses"] if address_destination(row["data"]) is None]
+            [row for row in staged["addresses"] if address_destination(row["data"]) is None and not address_creates_place(row["data"])]
         ),
         "contacts": preview_linked(staged["contacts"], "Contact", staged_client_ids),
     }
@@ -452,6 +453,11 @@ def address_destination(data):
     if address_type in {"DELIVERY", "OTHER"}:
         return "Lugar"
     return None
+
+
+def address_creates_place(data):
+    """Operational locations include the customer's main physical address."""
+    return (data.get("address-type") or "").upper() in {"DEFAULT", "DELIVERY", "OTHER"}
 
 
 def get_existing(doctype, stel_id):

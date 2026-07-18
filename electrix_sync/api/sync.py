@@ -1384,7 +1384,7 @@ def sync_place(address_data):
         log_sync("Lugar", "Skipped", None, message="Missing STEL address ID", payload=address_data)
         return "skipped"
 
-    if is_main_or_billing_address(address_data):
+    if is_invoicing_address(address_data):
         return "skipped"
 
     if frappe.db.exists("Address", {"custom_stel_id": stel_address_id}):
@@ -1407,11 +1407,11 @@ def sync_place(address_data):
         return "error"
 
 
-def is_main_or_billing_address(address_data):
+def is_invoicing_address(address_data):
     address_type = (get_first(address_data, "address-type", "addressType") or "").upper()
     address_type_name = (get_first(address_data, "address-type-name", "addressTypeName", "name") or "").strip().lower()
 
-    return address_type in {"DEFAULT", "INVOICING", "BILLING"} or address_type_name in {"default", "invoicing", "billing", "facturacion", "facturación"}
+    return address_type in {"INVOICING", "BILLING"} or address_type_name in {"invoicing", "billing", "facturacion", "facturación"}
 
 
 def get_place_name(address_data):

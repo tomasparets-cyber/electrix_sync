@@ -1,4 +1,5 @@
 from electrix_sync.api.master_data import (
+    address_creates_place,
     address_destination,
     blank_counts,
     customer_name,
@@ -32,6 +33,13 @@ def test_address_destination_uses_confirmed_business_rule():
     assert address_destination({"address-type": "DELIVERY"}) == "Lugar"
     assert address_destination({"address-type": "OTHER"}) == "Lugar"
     assert address_destination({"address-type": "UNKNOWN"}) is None
+
+
+def test_main_address_also_creates_an_operational_place():
+    assert address_creates_place({"address-type": "DEFAULT"}) is True
+    assert address_creates_place({"address-type": "DELIVERY"}) is True
+    assert address_creates_place({"address-type": "OTHER"}) is True
+    assert address_creates_place({"address-type": "INVOICING"}) is False
 
 
 def test_location_key_merges_same_physical_address():
