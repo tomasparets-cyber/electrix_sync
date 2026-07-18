@@ -9,11 +9,46 @@ class ElectrixPlanning {
 			title: __("Planificación"),
 			single_column: true,
 		});
+		this.ensureComponentStyles();
 		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.draggedEvent = null;
 		this.wasDragging = false;
 		this.buildActions();
 		this.load();
+	}
+
+	ensureComponentStyles() {
+		if (document.getElementById("electrix-planning-table-actions-style")) return;
+		$(document.head).append(`<style id="electrix-planning-table-actions-style">
+			.planning-event > button.pc-actions-toggle {
+				position:absolute !important; inset:3px 3px auto auto !important;
+				width:22px !important; min-width:22px !important; max-width:22px !important;
+				height:22px !important; min-height:22px !important; margin:0 !important;
+				padding:0 !important; display:flex !important; align-items:center !important;
+				justify-content:center !important; border:0 !important; border-radius:4px !important;
+				background:transparent !important; box-shadow:none !important; color:var(--text-muted) !important;
+				font-size:14px !important; line-height:1 !important; opacity:.8; z-index:5;
+			}
+			.planning-event > button.pc-actions-toggle:hover,
+			.planning-event > button.pc-actions-toggle:focus { opacity:1; background:var(--control-bg) !important; }
+			body > .pc-event-actions-menu {
+				position:fixed !important; display:block !important; z-index:1060 !important;
+				min-width:160px !important; width:auto !important; margin:0 !important; padding:5px !important;
+				border:1px solid var(--border-color) !important; border-radius:8px !important;
+				background:var(--card-bg) !important; box-shadow:0 8px 24px rgba(0,0,0,.16) !important;
+			}
+			body > .pc-event-actions-menu > button {
+				position:static !important; width:100% !important; min-width:0 !important; height:auto !important;
+				display:flex !important; align-items:center !important; gap:8px !important;
+				margin:0 !important; padding:7px 9px !important; border:0 !important; border-radius:5px !important;
+				background:transparent !important; box-shadow:none !important; color:var(--text-color) !important;
+				justify-content:flex-start !important; text-align:left !important;
+			}
+			body > .pc-event-actions-menu > button[data-action="delete"] { color:var(--red-500) !important; }
+			body > .pc-event-actions-menu > button > span { flex:1; text-align:left !important; }
+			body > .pc-event-actions-menu > button:hover,
+			body > .pc-event-actions-menu > button:focus { background:var(--subtle-fg) !important; }
+		</style>`);
 	}
 
 	buildActions() {
