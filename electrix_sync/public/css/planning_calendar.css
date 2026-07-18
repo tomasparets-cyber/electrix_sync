@@ -4,7 +4,7 @@
 .pc-calendar-actions { display:flex; gap:6px; padding:2px 4px 8px; border-bottom:1px solid var(--border-color); margin-bottom:4px; }
 .pc-calendar-option { display:flex; align-items:center; gap:8px; padding:7px 6px; margin:0; cursor:pointer; font-weight:400; }
 .pc-calendar-option:hover { background:var(--subtle-fg); border-radius:6px; }
-.pc-calendar { overflow:auto; border:1px solid var(--border-color); border-radius:10px; background:var(--card-bg); }
+.pc-calendar { height:calc(100vh - 190px); min-height:480px; overflow:auto; border:1px solid var(--border-color); border-radius:10px; background:var(--card-bg); }
 .pc-header,.pc-body { display:grid; grid-template-columns:62px repeat(7,minmax(125px,1fr)); min-width:950px; }
 .pc-header { position:sticky; top:0; z-index:4; background:var(--card-bg); border-bottom:1px solid var(--border-color); }
 .pc-day-header { padding:9px; text-align:center; border-left:1px solid var(--border-color); display:flex; flex-direction:column; text-transform:capitalize; }

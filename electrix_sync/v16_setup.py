@@ -407,7 +407,7 @@ def add_projects_sidebar_items():
                 row = frappe.get_doc({
                     "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                     "parenttype": "Workspace Sidebar", "parentfield": "items",
-                    "idx": idx, "type": "Link", "child": 1, **item_data,
+                    "idx": idx, "type": "Link", "child": 1, "indent": 1, **item_data,
                 }).insert(ignore_permissions=True)
                 ordered_names.append(row.name)
 

@@ -1,8 +1,10 @@
-.planning-shell { display: grid; grid-template-columns: minmax(760px, 1fr) 320px; gap: 18px; min-height: 70vh; }
-.planning-board, .planning-backlog { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+.planning-shell { display: grid; grid-template-columns: minmax(760px, 1fr) 320px; gap: 18px; height: calc(100vh - 190px); min-height: 480px; overflow: hidden; }
+.planning-board, .planning-backlog { min-height: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+.planning-board { display: flex; flex-direction: column; }
 .planning-period { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--border-color); }
+.planning-table-scroll { min-height: 0; flex: 1; overflow: auto; }
 .planning-grid { display: grid; grid-template-columns: 190px repeat(7, minmax(115px, 1fr)); }
-.planning-grid-header { background: var(--subtle-fg); border-bottom: 1px solid var(--border-color); }
+.planning-grid-header { position: sticky; top: 0; z-index: 6; background: var(--subtle-fg); border-bottom: 1px solid var(--border-color); }
 .planning-employee-header, .planning-day-header { padding: 10px; border-right: 1px solid var(--border-color); }
 .planning-day-header { text-align: center; display: flex; flex-direction: column; gap: 2px; text-transform: capitalize; }
 .planning-day-header span, .planning-employee span { color: var(--text-muted); font-size: 12px; }
@@ -14,8 +16,8 @@
 .planning-event { position: relative; margin-bottom: 6px; padding: 8px 30px 8px 9px; border-radius: 8px; background: var(--blue-100); border-left: 3px solid var(--blue-500); cursor: grab; display: flex; flex-direction: column; gap: 2px; }
 .planning-event strong { font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
 .planning-event span, .planning-event small { color: var(--text-muted); font-size: 11px; }
-.planning-backlog { background: var(--subtle-fg); padding: 14px; }
-.planning-backlog-list { min-height: 180px; border-radius: 8px; transition: background .15s, outline .15s; }
+.planning-backlog { display: flex; flex-direction: column; background: var(--subtle-fg); padding: 14px; }
+.planning-backlog-list { min-height: 0; flex: 1; overflow-y: auto; border-radius: 8px; transition: background .15s, outline .15s; }
 .planning-backlog-list.is-over { background: var(--orange-50); outline: 2px dashed var(--orange-400); outline-offset: 4px; }
 .planning-backlog-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 16px; }
 .planning-backlog-title span { background: var(--gray-200); border-radius: 10px; padding: 2px 8px; font-size: 12px; }
@@ -23,4 +25,4 @@
 .planning-event.is-backlog { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 3px solid var(--orange-400); padding: 11px; }
 .planning-event.has-sync-warning { border-left-color: var(--orange-500); background: var(--orange-50); }
 .planning-loading, .planning-empty { padding: 30px; color: var(--text-muted); text-align: center; }
-@media (max-width: 1100px) { .planning-shell { grid-template-columns: 1fr; } .planning-backlog { order: -1; } .planning-board { overflow-x: auto; } .planning-grid { min-width: 1000px; } }
+@media (max-width: 1100px) { .planning-shell { grid-template-columns: 1fr; height: auto; overflow: visible; } .planning-backlog { order: -1; max-height: 300px; } .planning-board { height: calc(100vh - 210px); min-height: 480px; } .planning-grid { min-width: 1000px; } }

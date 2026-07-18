@@ -13,7 +13,9 @@ class ElectrixPlanning {
 		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.draggedEvent = null;
 		this.wasDragging = false;
+		this.visibleEmployees = new Set();
 		this.buildActions();
+		this.addCalendarMenu();
 		this.load();
 	}
 
@@ -62,6 +64,16 @@ class ElectrixPlanning {
 		this.page.set_primary_action(__("Actualizar"), () => this.load(), "refresh");
 	}
 
+	addCalendarMenu() {
+		this.calendarMenu = $(`<div class="dropdown pc-calendar-menu">
+			<button class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+				${frappe.utils.icon("calendar", "sm")} ${__("Calendarios")} <span class="caret"></span>
+			</button><div class="dropdown-menu dropdown-menu-right pc-calendar-options"></div>
+		</div>`);
+		this.page.inner_toolbar.append(this.calendarMenu);
+		this.calendarMenu.on("click", ".dropdown-menu", (event) => event.stopPropagation());
+	}
+
 	async repairCalendars() {
 		const response = await frappe.call({
 			method: "electrix_sync.api.planning.repair_calendar_assignments",
@@ -99,7 +111,39 @@ class ElectrixPlanning {
 			freeze: false,
 		});
 		this.data = response.message;
+		this.employees = this.data.employees.filter((row) => row.custom_stel_calendar_id);
+		if (!this.filtersInitialized) {
+			this.employees.forEach((row) => this.visibleEmployees.add(row.name));
+			this.filtersInitialized = true;
+		}
+		this.renderCalendarMenu();
 		this.render();
+	}
+
+	renderCalendarMenu() {
+		const rows = this.employees.map((row) => `<label class="dropdown-item pc-calendar-option">
+			<input type="checkbox" data-employee="${row.name}" ${this.visibleEmployees.has(row.name) ? "checked" : ""}>
+			<span>${frappe.utils.escape_html(row.employee_name)}</span>
+		</label>`).join("");
+		this.calendarMenu.find(".pc-calendar-options").html(`<div class="pc-calendar-actions">
+			<button class="btn btn-xs btn-default pc-select-all">${__("Todos")}</button>
+			<button class="btn btn-xs btn-default pc-select-none">${__("Ninguno")}</button>
+		</div>${rows || `<div class="dropdown-item text-muted">${__("No hay calendarios")}</div>`}`);
+		this.calendarMenu.find("input").on("change", (event) => {
+			const employee = event.currentTarget.dataset.employee;
+			event.currentTarget.checked ? this.visibleEmployees.add(employee) : this.visibleEmployees.delete(employee);
+			this.applyFilters();
+		});
+		this.calendarMenu.find(".pc-select-all").on("click", () => {
+			this.employees.forEach((row) => this.visibleEmployees.add(row.name));
+			this.renderCalendarMenu();
+			this.applyFilters();
+		});
+		this.calendarMenu.find(".pc-select-none").on("click", () => {
+			this.visibleEmployees.clear();
+			this.renderCalendarMenu();
+			this.applyFilters();
+		});
 	}
 
 	render() {
@@ -108,17 +152,19 @@ class ElectrixPlanning {
 			<div class="planning-day-header">
 				<strong>${this.dayHeading(day)}</strong>
 			</div>`).join("");
-		const rows = this.data.employees.map((employee) => this.employeeRow(employee, days)).join("");
+		const rows = this.employees.map((employee) => this.employeeRow(employee, days)).join("");
 		const unplanned = this.data.unplanned.map((event) => this.eventCard(event, true)).join("");
 
 		this.page.main.html(`
 			<div class="planning-shell">
 				<section class="planning-board">
 					<div class="planning-period">${this.monthHeading(days[0])}</div>
-					<div class="planning-grid planning-grid-header">
-						<div class="planning-employee-header">${__("Empleado")}</div>${dayHeaders}
+					<div class="planning-table-scroll">
+						<div class="planning-grid planning-grid-header">
+							<div class="planning-employee-header">${__("Empleado")}</div>${dayHeaders}
+						</div>
+						<div class="planning-rows">${rows || `<div class="planning-empty">${__("No hay empleados activos")}</div>`}</div>
 					</div>
-					<div class="planning-rows">${rows || `<div class="planning-empty">${__("No hay empleados activos")}</div>`}</div>
 				</section>
 				<aside class="planning-backlog">
 					<div class="planning-backlog-title"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div>
@@ -127,6 +173,7 @@ class ElectrixPlanning {
 				</aside>
 			</div>`);
 		this.bind();
+		this.applyFilters();
 	}
 
 	employeeRow(employee, days) {
@@ -138,13 +185,19 @@ class ElectrixPlanning {
 				${events.map((event) => this.eventCard(event, false)).join("")}
 			</div>`;
 		}).join("");
-		return `<div class="planning-grid planning-row">
+		return `<div class="planning-grid planning-row" data-employee="${employee.name}">
 			<div class="planning-employee">
 				<strong>${this.escape(employee.employee_name)}</strong>
 				<span>${this.escape(employee.designation || "")}</span>
 				${employee.custom_stel_calendar_id ? "" : `<em>${__("Sin calendario STEL")}</em>`}
 			</div>${cells}
 		</div>`;
+	}
+
+	applyFilters() {
+		this.page.main.find(".planning-row").each((_, row) => {
+			row.style.display = this.visibleEmployees.has(row.dataset.employee) ? "grid" : "none";
+		});
 	}
 
 	eventCard(event, backlog) {
