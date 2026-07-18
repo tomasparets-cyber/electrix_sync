@@ -191,8 +191,8 @@ def repair_calendar_assignments(refresh=False):
 
 @frappe.whitelist()
 def plan_event(event_name, employee, starts_on, ends_on=None):
+    check_planning_access()
     event = frappe.get_doc("Event", event_name)
-    event.check_permission("write")
     employee_doc = frappe.get_doc("Employee", employee)
     calendar_id = employee_doc.get("custom_stel_calendar_id")
     if not calendar_id:
@@ -225,6 +225,7 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
 
 @frappe.whitelist()
 def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employees=None):
+    check_planning_access()
     employee_doc = frappe.get_doc("Employee", employee)
     if not employee_doc.get("custom_stel_calendar_id"):
         frappe.throw(_("Employee {0} has no STEL calendar assigned").format(employee_doc.employee_name))
@@ -258,8 +259,8 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
 
 @frappe.whitelist()
 def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employee=None, employees=None):
+    check_planning_access()
     event = frappe.get_doc("Event", event_name)
-    event.check_permission("write")
     starts_on = get_datetime(starts_on)
     ends_on = get_datetime(ends_on)
     if ends_on <= starts_on:
@@ -295,8 +296,8 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
 
 @frappe.whitelist()
 def unplan_event(event_name):
+    check_planning_access()
     event = frappe.get_doc("Event", event_name)
-    event.check_permission("write")
     if event.get("custom_stel_id"):
         StelClient().delete_event(event.custom_stel_id)
     event.custom_stel_id = None
@@ -310,17 +311,17 @@ def unplan_event(event_name):
 
 @frappe.whitelist()
 def delete_planned_event(event_name):
+    check_planning_access()
     event = frappe.get_doc("Event", event_name)
-    event.check_permission("delete")
-    frappe.delete_doc("Event", event.name)
+    frappe.delete_doc("Event", event.name, ignore_permissions=True)
     frappe.db.commit()
     return {"name": event.name}
 
 
 @frappe.whitelist()
 def resize_event(event_name, starts_on, ends_on):
+    check_planning_access()
     event = frappe.get_doc("Event", event_name)
-    event.check_permission("write")
     starts_on = get_datetime(starts_on)
     ends_on = get_datetime(ends_on)
     if ends_on <= starts_on:
@@ -377,8 +378,8 @@ def replace_stel_event(event, calendar_id, starts_on, ends_on):
 @frappe.whitelist()
 def duplicate_event(event_name, starts_on=None, employee=None):
     """Duplicate one ERP/STEL event for the selected employee."""
+    check_planning_access()
     source = frappe.get_doc("Event", event_name)
-    source.check_permission("read")
     employee = employee or source.get("custom_assigned_employee")
     if not employee:
         frappe.throw(_("Select an employee before duplicating the event"))
@@ -389,6 +390,13 @@ def duplicate_event(event_name, starts_on=None, employee=None):
         description=source.description, event_category=source.get("event_category"), status=source.status,
         location=source.get("location"),
     )
+
+
+def check_planning_access():
+    """Allow planning operations to authenticated ERPNext desk users only."""
+    user = frappe.session.user
+    if user == "Guest" or frappe.db.get_value("User", user, "user_type") != "System User":
+        frappe.throw(_("You are not permitted to manage planning events"), frappe.PermissionError)
 
 
 def create_stel_event(event, calendar_id, starts_on, ends_on):
