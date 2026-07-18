@@ -96,6 +96,8 @@ def sync_employees():
         status = sync_employee(item, settings, calendars=calendars)
         stats[status] += 1
 
+    stats["deactivated"] = reconcile_missing_stel_employees(items)
+
     frappe.db.commit()
     return stats
 
@@ -487,6 +489,11 @@ def sync_employee(item, settings, calendars=None):
         existing = frappe.db.get_value("Employee", {"custom_stel_id": stel_id}, "name")
         doc = frappe.get_doc("Employee", existing) if existing else frappe.new_doc("Employee")
 
+        if not user_name and existing and has_field(doc, "user_id"):
+            user_name = doc.get("user_id")
+        if user_name and user_name not in {"Administrator", "Guest"} and frappe.db.exists("User", user_name):
+            frappe.db.set_value("User", user_name, "enabled", 1, update_modified=False)
+
         first_name, last_name = get_employee_names(item, stel_id)
         doc.first_name = first_name
         if has_field(doc, "last_name"):
@@ -567,36 +574,64 @@ def sync_user(item, settings, stel_id, email):
 
 
 def sync_deleted_employee(stel_id, item):
-    user_name = frappe.db.get_value("User", {"custom_stel_id": stel_id}, "name")
-    if user_name:
-        frappe.db.set_value(
-            "User",
-            user_name,
-            {
-                "enabled": 0,
-                "custom_stel_last_sync": now(),
-                "custom_stel_sync_status": "Skipped",
-            },
-            update_modified=False,
-        )
-
     employee_name = frappe.db.get_value("Employee", {"custom_stel_id": stel_id}, "name")
+    deactivate_stel_employee(stel_id, employee_name)
+    if employee_name:
+        log_sync("Employee", "Skipped", stel_id, "Employee", employee_name, "STEL employee is deleted", payload=item)
+        return "updated"
+
+    log_sync("Employee", "Skipped", stel_id, message="STEL employee is deleted", payload=item)
+    return "skipped"
+
+
+def reconcile_missing_stel_employees(items):
+    """Deactivate ERP employees absent from a complete STEL employee snapshot."""
+    if not items:
+        return 0
+    live_ids = {
+        str(get_stel_id(item))
+        for item in items
+        if get_stel_id(item) and item.get("deleted") is not True
+    }
+    linked = frappe.get_all(
+        "Employee",
+        filters={"custom_stel_id": ["is", "set"], "status": "Active"},
+        fields=["name", "custom_stel_id"],
+    )
+    deactivated = 0
+    for employee in linked:
+        if str(employee.custom_stel_id) in live_ids:
+            continue
+        deactivate_stel_employee(employee.custom_stel_id, employee.name)
+        log_sync(
+            "Employee", "Success", employee.custom_stel_id, "Employee", employee.name,
+            "Deactivated because employee is no longer returned by STEL",
+        )
+        deactivated += 1
+    return deactivated
+
+
+def deactivate_stel_employee(stel_id, employee_name=None):
+    employee_name = employee_name or frappe.db.get_value("Employee", {"custom_stel_id": stel_id}, "name")
+    employee_user = frappe.db.get_value("Employee", employee_name, "user_id") if employee_name else None
+    user_name = frappe.db.get_value("User", {"custom_stel_id": stel_id}, "name") or employee_user
+    if user_name and user_name not in {"Administrator", "Guest"}:
+        values = {"enabled": 0}
+        if frappe.get_meta("User").has_field("custom_stel_last_sync"):
+            values.update({"custom_stel_last_sync": now(), "custom_stel_sync_status": "Skipped"})
+        frappe.db.set_value("User", user_name, values, update_modified=False)
     if employee_name:
         frappe.db.set_value(
             "Employee",
             employee_name,
             {
                 "status": "Inactive",
+                "custom_stel_calendar_id": None,
                 "custom_stel_last_sync": now(),
                 "custom_stel_sync_status": "Skipped",
             },
             update_modified=False,
         )
-        log_sync("Employee", "Skipped", stel_id, "Employee", employee_name, "STEL employee is deleted", payload=item)
-        return "updated"
-
-    log_sync("Employee", "Skipped", stel_id, message="STEL employee is deleted", payload=item)
-    return "skipped"
 
 
 def get_employee_names(item, stel_id):

@@ -13,6 +13,8 @@ from electrix_sync.api.sync import (
     delete_missing_stel_events,
     get_stel_id,
     match_employee_calendar,
+    reconcile_missing_stel_employees,
+    sync_employee,
     normalize_stel_event_datetime,
     normalize_event_category,
 )
@@ -92,6 +94,13 @@ def repair_calendar_assignments(refresh=False):
     refresh = str(refresh).lower() in {"1", "true", "yes"}
     client = StelClient() if refresh else None
     calendars = client.get_calendars() if client else [row["data"] for row in get_staged("calendars")]
+    deactivated_employees = 0
+    if client:
+        settings = frappe.get_single("Electrix Sync Settings")
+        stel_employees = client.get_employees()
+        for item in stel_employees:
+            sync_employee(item, settings, calendars)
+        deactivated_employees = reconcile_missing_stel_employees(stel_employees)
     employees = frappe.get_all(
         "Employee",
         filters={"status": "Active"},
@@ -171,6 +180,7 @@ def repair_calendar_assignments(refresh=False):
     frappe.db.commit()
     return {
         "employees": mapped_employees,
+        "deactivated_employees": deactivated_employees,
         "events": mapped_events,
         "deleted_events": deleted_events,
         "calendars": len(calendars),

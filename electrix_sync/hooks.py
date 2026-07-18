@@ -39,7 +39,10 @@ after_install = "electrix_sync.v16_setup.ensure_staging_doctypes"
 after_migrate = "electrix_sync.v16_setup.ensure_staging_doctypes"
 
 scheduler_events = {
-    "hourly": ["electrix_sync.api.sidebar.maintain_projects_customizations"],
+    "hourly": [
+        "electrix_sync.api.sidebar.maintain_projects_customizations",
+        "electrix_sync.api.sync.sync_employees",
+    ],
     "cron": {
         "*/5 * * * *": ["electrix_sync.api.realtime_sync.sync_event_calendars"],
     }
