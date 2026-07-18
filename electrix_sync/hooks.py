@@ -18,6 +18,9 @@ doctype_js = {
 }
 
 doc_events = {
+    "Address": {
+        "on_update": "electrix_sync.api.location_sync.enqueue_primary_address",
+    },
     "Lugar": {
         "validate": "electrix_sync.api.locations.validate_lugar",
         "on_update": "electrix_sync.api.location_sync.enqueue_location",

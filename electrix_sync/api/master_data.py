@@ -146,6 +146,7 @@ def import_address(row):
     }
     update_existing_fields(doc, values)
     ensure_dynamic_link(doc, "Customer", customer)
+    doc.flags.skip_stel_outbound = True
     doc.save(ignore_permissions=True) if existing else doc.insert(ignore_permissions=True)
     return "updated" if existing else "created"
 

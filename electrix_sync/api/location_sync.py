@@ -8,6 +8,122 @@ from frappe.utils import now
 from electrix_sync.api.stel import StelClient
 
 
+def enqueue_primary_address(doc, method=None):
+    """Push ERPNext's primary customer Address through STEL's client API."""
+    if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
+        return
+    if not doc.get("is_primary_address") or not doc.get("custom_stel_id"):
+        return
+    customer = primary_address_customer(doc)
+    if not customer:
+        return
+    frappe.enqueue(
+        "electrix_sync.api.location_sync.push_primary_address",
+        queue="short",
+        enqueue_after_commit=True,
+        address_name=doc.name,
+        customer=customer,
+    )
+
+
+def push_primary_address(address_name, customer):
+    address = frappe.get_doc("Address", address_name)
+    stel_customer_id = frappe.db.get_value("Customer", customer, "custom_stel_id")
+    if not stel_customer_id:
+        frappe.throw(_("Customer {0} must be synchronized before its primary address.").format(customer))
+    try:
+        payload = main_address_payload(address)
+        response = StelClient().update_customer(stel_customer_id, {"main-address": payload})
+        if address.meta.has_field("custom_stel_last_sync"):
+            frappe.db.set_value("Address", address.name, {
+                "custom_stel_last_sync": now(),
+                "custom_stel_sync_status": "Synced",
+            }, update_modified=False)
+        mirror_primary_address_to_place(address)
+        frappe.db.commit()
+        return response
+    except Exception:
+        if address.meta.has_field("custom_stel_sync_status"):
+            frappe.db.set_value("Address", address.name, "custom_stel_sync_status", "Error", update_modified=False)
+            frappe.db.commit()
+        raise
+
+
+def primary_address_customer(address):
+    for link in address.get("links", []):
+        if link.link_doctype == "Customer" and link.link_name:
+            return link.link_name
+    return None
+
+
+def main_address_payload(address):
+    payload = {
+        "address-data": optional_text(address.address_line1, 256),
+        "postal-code": optional_text(address.pincode, 10),
+        "province": optional_text(address.state, 64),
+        "city-town": optional_text(address.city, 64),
+        "country-code": country_code(address.country),
+        "latitude": address.get("custom_stel_latitude"),
+        "longitude": address.get("custom_stel_longitude"),
+    }
+    return {key: value for key, value in payload.items() if value not in (None, "")}
+
+
+def place_main_address_payload(place):
+    payload = {
+        "address-data": optional_text(place.address_line1, 256),
+        "postal-code": optional_text(place.postal_code, 10),
+        "province": optional_text(place.province, 64),
+        "city-town": optional_text(place.city, 64),
+        "country-code": country_code(place.country),
+        "latitude": place.latitude,
+        "longitude": place.longitude,
+    }
+    return {key: value for key, value in payload.items() if value not in (None, "")}
+
+
+def mirror_primary_address_to_place(address):
+    if not frappe.db.exists("DocType", "Lugar STEL Link"):
+        return
+    place_name = frappe.db.get_value(
+        "Lugar STEL Link", {"stel_address_id": str(address.custom_stel_id)}, "parent"
+    )
+    if not place_name:
+        return
+    place = frappe.get_doc("Lugar", place_name)
+    place.address_line1 = address.address_line1
+    place.address_line2 = address.address_line2
+    place.postal_code = address.pincode
+    place.city = address.city
+    place.province = address.state
+    place.country = address.country
+    if address.meta.has_field("custom_stel_latitude"):
+        place.latitude = address.custom_stel_latitude
+    if address.meta.has_field("custom_stel_longitude"):
+        place.longitude = address.custom_stel_longitude
+    place.flags.skip_stel_outbound = True
+    place.save(ignore_permissions=True)
+
+
+def mirror_place_to_primary_address(place, stel_address_id):
+    address_name = frappe.db.get_value("Address", {"custom_stel_id": str(stel_address_id)}, "name")
+    if not address_name:
+        return
+    address = frappe.get_doc("Address", address_name)
+    address.address_line1 = place.address_line1
+    address.address_line2 = place.address_line2
+    address.pincode = place.postal_code
+    address.city = place.city
+    address.state = place.province
+    address.country = place.country
+    if address.meta.has_field("custom_stel_latitude"):
+        address.custom_stel_latitude = place.latitude
+    if address.meta.has_field("custom_stel_longitude"):
+        address.custom_stel_longitude = place.longitude
+    address.flags.skip_stel_outbound = True
+    address.save(ignore_permissions=True)
+
+
 def enqueue_location(doc, method=None):
     """Synchronize ERPNext-owned locations without echoing inbound STEL writes."""
     if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
@@ -33,9 +149,18 @@ def push_location(place_name):
     for link in place.stel_links:
         if not link.stel_address_id:
             continue
-        # STEL's addresses endpoint explicitly rejects updates to DEFAULT.
-        # It remains usable as an address-id and authoritative on inbound sync.
         if str(link.get("stel_address_type") or "").upper() == "DEFAULT":
+            stel_customer_id = link.stel_customer_id or frappe.db.get_value("Customer", link.customer, "custom_stel_id")
+            if stel_customer_id:
+                client.update_customer(stel_customer_id, {"main-address": place_main_address_payload(place)})
+                mirror_place_to_primary_address(place, link.stel_address_id)
+                frappe.db.set_value("Lugar STEL Link", link.name, {
+                    "payload_hash": location_payload_hash(payload),
+                    "sync_enabled": 1,
+                    "sync_status": "Synced",
+                    "last_sync": now(),
+                }, update_modified=False)
+                updated.append(str(link.stel_address_id))
             continue
         client.update_address(link.stel_address_id, payload)
         frappe.db.set_value("Lugar STEL Link", link.name, {

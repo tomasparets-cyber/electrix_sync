@@ -1353,6 +1353,7 @@ def sync_billing_address(item, customer_name):
         address.custom_stel_sync_status = "Synced"
 
         ensure_dynamic_link(address, "Customer", customer_name)
+        address.flags.skip_stel_outbound = True
 
         if existing:
             address.save(ignore_permissions=True)

@@ -23,6 +23,9 @@ class StelClient:
     def get_leads(self):
         return self.get_collection(self.settings.leads_endpoint)
 
+    def update_customer(self, customer_id, payload):
+        return self._write("PUT", f"/app/clients/{customer_id}", payload)
+
     def get_addresses(self):
         endpoint = getattr(self.settings, "addresses_endpoint", None) or "/app/addresses"
         return self.get_collection(endpoint)
