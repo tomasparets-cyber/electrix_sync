@@ -54,7 +54,6 @@ class ElectrixPlanning {
 	}
 
 	buildActions() {
-		this.page.add_inner_button(__("Sincronizar calendarios"), () => this.repairCalendars());
 		this.page.add_inner_button(__("Anterior"), () => this.shiftWeek(-7));
 		this.page.add_inner_button(__("Hoy"), () => {
 			this.startDate = this.startOfWeek(frappe.datetime.get_today());

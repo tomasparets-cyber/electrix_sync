@@ -8,7 +8,6 @@ class ElectrixPlanningCalendar {
 		this.ensureComponentStyles();
 		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.visibleEmployees = new Set();
-		this.page.add_inner_button(__("Tabla"), () => frappe.set_route("planning"));
 		this.page.add_inner_button(__("Anterior"), () => this.shift(-7));
 		this.page.add_inner_button(__("Hoy"), () => { this.startDate = this.startOfWeek(frappe.datetime.get_today()); this.load(); });
 		this.page.add_inner_button(__("Siguiente"), () => this.shift(7));
