@@ -1,10 +1,10 @@
 from datetime import timedelta
-from zoneinfo import ZoneInfo
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, get_datetime, get_system_timezone, nowdate
+from frappe.utils import add_days, get_datetime, now, nowdate
 
+from electrix_sync.api.event_sync_state import event_hash_from_doc
 from electrix_sync.api.master_data import get_staged
 from electrix_sync.api.stel import StelClient
 from electrix_sync.api.sync import (
@@ -221,6 +221,7 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     set_event_participant(event, employee_doc.get("user_id"))
+    mark_event_sync_state(event)
     return {"name": event.name, "stel_id": event.custom_stel_id}
 
 
@@ -255,6 +256,7 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     set_event_participant(event, employee_doc.get("user_id"))
+    mark_event_sync_state(event)
     return {"name": event.name, "stel_id": event.custom_stel_id}
 
 
@@ -292,6 +294,7 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
         event.custom_stel_calendar_id = str(calendar_id)
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
+    mark_event_sync_state(event)
     return {"name": event.name, "stel_id": event.custom_stel_id}
 
 
@@ -307,6 +310,11 @@ def unplan_event(event_name):
     event.custom_planning_status = "Unplanned"
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
+    frappe.db.set_value(
+        "Event", event.name,
+        {"custom_stel_sync_status": "Skipped", "custom_stel_payload_hash": None, "custom_stel_last_sync": now()},
+        update_modified=False,
+    )
     return {"name": event.name}
 
 
@@ -334,6 +342,7 @@ def resize_event(event_name, starts_on, ends_on):
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
+    mark_event_sync_state(event)
     return {"name": event.name}
 
 
@@ -467,10 +476,28 @@ def extract_stel_id(response):
 
 
 def stel_datetime(value):
+    """Send STEL calendar wall time without applying the ERPNext timezone offset.
+
+    STEL stores the supplied instant as its visible calendar clock. Sending
+    07:00+0200 therefore displays 05:00; 07:00+0000 preserves 07:00.
+    """
     value = get_datetime(value)
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=ZoneInfo(get_system_timezone()))
-    return value.strftime("%Y-%m-%dT%H:%M:%S%z")
+    return value.strftime("%Y-%m-%dT%H:%M:%S+0000")
+
+
+def mark_event_sync_state(event):
+    frappe.db.set_value(
+        "Event",
+        event.name,
+        {
+            "custom_stel_sync_status": "Synced",
+            "custom_stel_payload_hash": event_hash_from_doc(event),
+            "custom_stel_last_sync": now(),
+            "custom_stel_last_error": None,
+            "custom_stel_conflict_payload": None,
+        },
+        update_modified=False,
+    )
 
 
 def erp_event_state(event):
