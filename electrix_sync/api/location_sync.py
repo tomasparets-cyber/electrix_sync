@@ -149,12 +149,13 @@ def push_location(place_name):
     for link in place.stel_links:
         if not link.stel_address_id:
             continue
-        if str(link.get("stel_address_type") or "").upper() == "DEFAULT":
+        if is_default_address_link(link):
             stel_customer_id = link.stel_customer_id or frappe.db.get_value("Customer", link.customer, "custom_stel_id")
             if stel_customer_id:
                 client.update_customer(stel_customer_id, {"main-address": place_main_address_payload(place)})
                 mirror_place_to_primary_address(place, link.stel_address_id)
                 frappe.db.set_value("Lugar STEL Link", link.name, {
+                    "stel_address_type": "DEFAULT",
                     "payload_hash": location_payload_hash(payload),
                     "sync_enabled": 1,
                     "sync_status": "Synced",
@@ -172,6 +173,17 @@ def push_location(place_name):
         updated.append(str(link.stel_address_id))
     frappe.db.commit()
     return {"owner_address_id": owner_link.stel_address_id, "updated": updated}
+
+
+def is_default_address_link(link):
+    if str(link.get("stel_address_type") or "").upper() == "DEFAULT":
+        return True
+    if not link.get("stel_address_id"):
+        return False
+    return bool(frappe.db.exists("Address", {
+        "custom_stel_id": str(link.stel_address_id),
+        "is_primary_address": 1,
+    }))
 
 
 def ensure_stel_location_link(place_name, customer):

@@ -21,6 +21,7 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
     migrate_location_owners()
+    migrate_location_address_types()
     migrate_project_location_field()
     add_projects_workspace_shortcuts()
     add_projects_sidebar_items()
@@ -47,6 +48,21 @@ def migrate_location_owners():
             link_name = frappe.db.get_value("Lugar STEL Link", {"parent": place_name, "customer": customer}, "name")
             if link_name:
                 frappe.db.set_value("Lugar STEL Link", link_name, "is_owner_link", 1, update_modified=False)
+
+
+def migrate_location_address_types():
+    """Recognize historical links that point at a customer's main Address."""
+    if not frappe.db.exists("DocType", "Lugar STEL Link") or not frappe.db.has_column("Lugar STEL Link", "stel_address_type"):
+        return
+    links = frappe.get_all(
+        "Lugar STEL Link",
+        filters={"stel_address_type": ["is", "not set"], "stel_address_id": ["is", "set"]},
+        fields=["name", "stel_address_id"],
+        limit_page_length=0,
+    )
+    for link in links:
+        if frappe.db.exists("Address", {"custom_stel_id": str(link.stel_address_id), "is_primary_address": 1}):
+            frappe.db.set_value("Lugar STEL Link", link.name, "stel_address_type", "DEFAULT", update_modified=False)
 
 
 def ensure_master_data_fields():
