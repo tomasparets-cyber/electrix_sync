@@ -27,6 +27,12 @@ class StelClient:
         endpoint = getattr(self.settings, "addresses_endpoint", None) or "/app/addresses"
         return self.get_collection(endpoint)
 
+    def create_address(self, payload):
+        return self._write("POST", "/app/addresses", payload)
+
+    def update_address(self, address_id, payload):
+        return self._write("PUT", f"/app/addresses/{address_id}", payload)
+
     def get_employees(self):
         endpoint = getattr(self.settings, "employees_endpoint", None) or "/app/employees"
         return self.get_collection(endpoint)

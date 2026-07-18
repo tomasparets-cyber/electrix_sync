@@ -20,6 +20,7 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
+    migrate_location_owners()
     migrate_project_location_field()
     add_projects_workspace_shortcuts()
     add_projects_sidebar_items()
@@ -28,6 +29,24 @@ def ensure_staging_doctypes():
     migrate_standard_status_and_type_fields()
     remove_redundant_functional_fields()
     repair_task_project_links()
+
+
+def migrate_location_owners():
+    """Use the first historical STEL customer as owner for existing places."""
+    if not frappe.db.exists("DocType", "Lugar") or not frappe.db.has_column("Lugar", "owner_customer"):
+        return
+    for place_name in frappe.get_all("Lugar", filters={"owner_customer": ["is", "not set"]}, pluck="name", limit_page_length=0):
+        customer = frappe.db.get_value(
+            "Lugar STEL Link",
+            {"parent": place_name, "customer": ["is", "set"]},
+            "customer",
+            order_by="idx asc",
+        )
+        if customer:
+            frappe.db.set_value("Lugar", place_name, "owner_customer", customer, update_modified=False)
+            link_name = frappe.db.get_value("Lugar STEL Link", {"parent": place_name, "customer": customer}, "name")
+            if link_name:
+                frappe.db.set_value("Lugar STEL Link", link_name, "is_owner_link", 1, update_modified=False)
 
 
 def ensure_master_data_fields():

@@ -5,7 +5,15 @@ from frappe.model.document import Document
 
 class Lugar(Document):
     def validate(self):
+        from electrix_sync.api.location_sync import erp_location_key
+        self.location_key = erp_location_key(self)
+        seen_customers = set()
         for link in self.stel_links:
+            if link.customer and link.customer in seen_customers:
+                frappe.throw(_("Customer {0} is linked more than once to this location.").format(link.customer))
+            if link.customer:
+                seen_customers.add(link.customer)
+            link.is_owner_link = 1 if link.customer and link.customer == self.owner_customer else 0
             if not link.sync_enabled:
                 continue
             if not link.customer:

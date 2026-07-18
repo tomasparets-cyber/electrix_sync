@@ -20,6 +20,7 @@ doctype_js = {
 doc_events = {
     "Lugar": {
         "validate": "electrix_sync.api.locations.validate_lugar",
+        "on_update": "electrix_sync.api.location_sync.enqueue_location",
     },
     "Task": {
         "on_update": "electrix_sync.api.outbound_sync.enqueue_task",

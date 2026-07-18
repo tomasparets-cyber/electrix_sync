@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import traceback
@@ -1390,28 +1391,16 @@ def sync_place(address_data):
         return "skipped"
 
     try:
-        existing = frappe.db.get_value("Lugar", {"custom_stel_id": stel_address_id}, "name")
-        place = frappe.get_doc("Lugar", existing) if existing else frappe.new_doc("Lugar")
-
-        place.nombre_lugar = get_place_name(address_data)
-        place.direccion = get_address_line1(address_data)
-        place.codigo_postal = get_first(address_data, "postal-code", "postalCode", "zip", "zipcode") or None
-        place.municipio = get_first(address_data, "city-town", "city", "localidad") or None
-        place.provincia = get_first(address_data, "province", "state", "provincia") or None
-        place.pais = get_place_country(address_data)
-        place.custom_stel_id = stel_address_id
-        place.custom_stel_last_sync = now()
-        place.custom_stel_sync_status = "Synced"
-
-        if existing:
-            place.save(ignore_permissions=True)
-            action = "updated"
-        else:
-            place.insert(ignore_permissions=True)
-            action = "created"
-
-        log_sync("Lugar", "Success", stel_address_id, "Lugar", place.name, f"Lugar {action}", payload=address_data)
-        return action
+        from electrix_sync.api.master_data import import_place
+        payload = json.dumps(address_data, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        action = import_place({
+            "remote_id": str(stel_address_id),
+            "payload_hash": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "data": address_data,
+        })
+        place_name = frappe.db.get_value("Lugar STEL Link", {"stel_address_id": str(stel_address_id)}, "parent")
+        log_sync("Lugar", "Success", stel_address_id, "Lugar", place_name, f"Lugar {action}", payload=address_data)
+        return "skipped" if action == "unchanged" else action
     except Exception:
         mark_error("Lugar", stel_address_id)
         log_sync("Lugar", "Error", stel_address_id, message="Lugar sync failed", error=traceback.format_exc(), payload=address_data)
@@ -1422,7 +1411,7 @@ def is_main_or_billing_address(address_data):
     address_type = (get_first(address_data, "address-type", "addressType") or "").upper()
     address_type_name = (get_first(address_data, "address-type-name", "addressTypeName", "name") or "").strip().lower()
 
-    return address_type in {"DEFAULT", "BILLING"} or address_type_name in {"default", "billing", "facturacion", "facturación"}
+    return address_type in {"DEFAULT", "INVOICING", "BILLING"} or address_type_name in {"default", "invoicing", "billing", "facturacion", "facturación"}
 
 
 def get_place_name(address_data):

@@ -5,9 +5,10 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["customer", "stel_customer_id", "stel_address_id", "payload_hash", "sync_enabled", "sync_status", "last_sync"],
+ "field_order": ["customer", "is_owner_link", "stel_customer_id", "stel_address_id", "payload_hash", "sync_enabled", "sync_status", "last_sync"],
  "fields": [
   {"fieldname": "customer", "fieldtype": "Link", "in_list_view": 1, "label": "Cliente ERPNext", "options": "Customer"},
+  {"fieldname": "is_owner_link", "fieldtype": "Check", "in_list_view": 1, "label": "Vínculo propietario", "read_only": 1},
   {"fieldname": "stel_customer_id", "fieldtype": "Data", "in_list_view": 1, "label": "STEL Customer ID", "read_only": 1},
   {"fieldname": "stel_address_id", "fieldtype": "Data", "in_list_view": 1, "label": "STEL Address ID", "read_only": 1},
   {"fieldname": "payload_hash", "fieldtype": "Data", "hidden": 1, "label": "STEL Payload Hash", "read_only": 1},

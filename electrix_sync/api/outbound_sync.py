@@ -313,17 +313,16 @@ def catalog_id(resource_type, *names):
 def task_relations(doc):
     values = {}
     project = frappe.get_doc("Project", doc.project) if doc.get("project") and frappe.db.exists("Project", doc.project) else None
+    customer = project.customer if project and project.get("customer") else None
     if project and project.get("customer"):
         account_id = frappe.db.get_value("Customer", project.customer, "custom_stel_id")
         if account_id:
             values["account-id"] = int(account_id)
-    if project and project.get("custom_service_location"):
-        filters = {"parent": project.custom_service_location, "sync_enabled": 1}
-        address_id = frappe.db.get_value("Lugar STEL Link", filters, "stel_address_id") or frappe.db.get_value(
-            "Lugar STEL Link", {"parent": project.custom_service_location}, "stel_address_id"
-        )
-        if address_id:
-            values["address-id"] = int(address_id)
+    if project and project.get("custom_service_location") and customer:
+        from electrix_sync.api.location_sync import ensure_stel_location_link
+        link = ensure_stel_location_link(project.custom_service_location, customer)
+        if link and link.stel_address_id:
+            values["address-id"] = int(link.stel_address_id)
     assigned_users = frappe.get_all(
         "ToDo", filters={"reference_type": "Task", "reference_name": doc.name, "status": "Open"},
         pluck="allocated_to", limit_page_length=1,

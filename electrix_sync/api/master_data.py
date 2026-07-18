@@ -190,29 +190,36 @@ def import_place(row):
     if not existing_parent and location_key:
         existing_parent = frappe.db.get_value("Lugar", {"location_key": location_key}, "name")
     doc = frappe.get_doc("Lugar", existing_parent) if existing_parent else frappe.new_doc("Lugar")
+    customer = customer_for_account(data.get("account-id"))
     link = next((x for x in doc.stel_links if str(x.stel_address_id) == row["remote_id"]), None)
     if link and link.payload_hash == row["payload_hash"]:
         return "unchanged"
-    update_existing_fields(doc, {
-        "location_name": clean(data.get("name")) or clean(data.get("address-data")) or f"STEL {row['remote_id']}",
-        "location_key": location_key,
-        "status": "Inactivo" if data.get("deleted") is True else "Activo",
-        "address_line1": clean(data.get("address-data")) or clean(data.get("formatted-address")),
-        "address_line2": clean(data.get("extra-data")),
-        "postal_code": clean(data.get("postal-code")),
-        "city": clean(data.get("city-town")),
-        "province": clean(data.get("province")),
-        "country": resolve_country(data.get("country-code")),
-        "latitude": data.get("latitude"),
-        "longitude": data.get("longitude"),
-        "sync_policy": "Recibir de STEL",
-    })
-    customer = customer_for_account(data.get("account-id"))
+    if not doc.get("owner_customer") and customer:
+        doc.owner_customer = customer
+    is_owner_copy = bool(customer and customer == doc.get("owner_customer"))
+    # Only the owner's STEL address is authoritative. Copies created below
+    # other accounts merely add a link to the same physical ERPNext Lugar.
+    if not existing_parent or is_owner_copy:
+        update_existing_fields(doc, {
+            "location_name": clean(data.get("name")) or clean(data.get("address-data")) or f"STEL {row['remote_id']}",
+            "location_key": location_key,
+            "status": "Inactivo" if data.get("deleted") is True else "Activo",
+            "address_line1": clean(data.get("address-data")) or clean(data.get("formatted-address")),
+            "address_line2": clean(data.get("extra-data")),
+            "postal_code": clean(data.get("postal-code")),
+            "city": clean(data.get("city-town")),
+            "province": clean(data.get("province")),
+            "country": resolve_country(data.get("country-code")),
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
+            "sync_policy": "Recibir de STEL",
+        })
     if not link:
         link = doc.append("stel_links", {})
     link.customer = customer
     link.stel_customer_id = str(data.get("account-id")) if data.get("account-id") is not None else None
     link.stel_address_id = row["remote_id"]
+    link.is_owner_link = 1 if is_owner_copy else 0
     link.payload_hash = row["payload_hash"]
     link.sync_enabled = 0
     link.sync_status = "Linked" if customer else "Local"
