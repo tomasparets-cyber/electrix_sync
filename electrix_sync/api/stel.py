@@ -45,6 +45,9 @@ class StelClient:
         endpoint = getattr(self.settings, "events_endpoint", None) or "/app/events"
         return self.get_collection(endpoint)
 
+    def get_event(self, event_id):
+        return self._get_one(f"/app/events/{event_id}")
+
     def get_calendars(self):
         return self.get_collection("/app/calendars")
 
@@ -113,6 +116,14 @@ class StelClient:
             raise StelPermissionError(f"STEL API permission denied for {response.url}.")
         response.raise_for_status()
         return response.json() if response.content else {}
+
+    def _get_one(self, endpoint):
+        url = urljoin(self.base_url, endpoint.lstrip("/"))
+        response = requests.get(url, headers=self._headers(), timeout=30)
+        if response.status_code == 403:
+            raise StelPermissionError(f"STEL API permission denied for {response.url}.")
+        response.raise_for_status()
+        return response.json()
 
     def _extract_items(self, data):
         if isinstance(data, list):

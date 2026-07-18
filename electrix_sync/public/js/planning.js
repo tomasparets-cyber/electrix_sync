@@ -149,8 +149,9 @@ class ElectrixPlanning {
 
 	eventCard(event, backlog) {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
-		const metadata = [event.event_category, event.status || "Open"].filter(Boolean).join(" · ");
-		return `<article class="planning-event ${backlog ? "is-backlog" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
+		const syncWarning = ["Error", "Conflict", "Pending"].includes(event.custom_stel_sync_status) ? `STEL: ${event.custom_stel_sync_status}` : null;
+		const metadata = [event.event_category, event.status || "Open", syncWarning].filter(Boolean).join(" · ");
+		return `<article class="planning-event ${backlog ? "is-backlog" : ""} ${syncWarning ? "has-sync-warning" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
 			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
 			<strong>${this.escape(event.subject || event.name)}</strong>
 			<span>${this.escape(metadata)}${backlog ? "" : ` · ${this.timeLabel(event.starts_on, event.ends_on)}`}</span>
@@ -261,11 +262,17 @@ class ElectrixPlanning {
 				...this.eventFields(source),
 				{ fieldtype: "Button", fieldname: "duplicate", label: __("Duplicar evento"), click: () => this.duplicateEvent(source.name, dialog) },
 				{ fieldtype: "Button", fieldname: "unplan", label: __("Pasar a sin programar"), click: () => this.unplanEvent(source.name, dialog) },
+				...(source.custom_stel_sync_status === "Conflict" ? [
+					{ fieldtype: "Button", fieldname: "keep_erp", label: __("Resolver usando ERPNext"), click: () => this.resolveConflict(source.name, "erpnext", dialog) },
+					{ fieldtype: "Button", fieldname: "keep_stel", label: __("Resolver usando STEL"), click: () => this.resolveConflict(source.name, "stel", dialog) },
+				] : []),
 			],
 			primary_action_label: __("Guardar"),
 			primary_action: async (values) => {
 				delete values.unplan;
 				delete values.duplicate;
+				delete values.keep_erp;
+				delete values.keep_stel;
 				values = this.eventPayload(values);
 				await frappe.call({
 					method: "electrix_sync.api.planning.edit_planned_event",
@@ -335,6 +342,13 @@ class ElectrixPlanning {
 			freeze_message: __("Pasando evento a sin programar…"),
 		});
 		dialog?.hide();
+		await this.load();
+	}
+
+	async resolveConflict(eventName, resolution, dialog) {
+		await frappe.call({ method: "electrix_sync.api.outbound_sync.resolve_event_conflict", args: { event_name: eventName, resolution }, freeze: true, freeze_message: __("Resolviendo conflicto con STEL…") });
+		dialog?.hide();
+		frappe.show_alert({ message: __("Conflicto resuelto"), indicator: "green" });
 		await this.load();
 	}
 

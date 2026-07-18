@@ -28,7 +28,7 @@
       "fieldtype": "Select",
       "in_list_view": 1,
       "label": "Status",
-      "options": "Success\nError\nSkipped"
+      "options": "Success\nError\nConflict\nSkipped"
     },
     {
       "fieldname": "stel_id",

@@ -14,6 +14,7 @@
 .pc-day { position:relative; height:1152px; border-left:1px solid var(--border-color); background:repeating-linear-gradient(to bottom,transparent 0,transparent 47px,var(--border-color) 48px); }
 .pc-event { position:absolute; z-index:2; overflow:hidden; padding:4px 5px 8px; border:0; border-left:3px solid var(--blue-500); border-radius:5px; background:var(--blue-100); color:var(--text-color); text-align:left; font-size:10px; display:flex; flex-direction:column; cursor:grab; user-select:none; }
 .pc-event:active { cursor:grabbing; }
+.pc-event.has-sync-warning { border-left-color:var(--orange-500); background:var(--orange-50); }
 .pc-event.is-moving { opacity:.72; z-index:20; cursor:grabbing; box-shadow:0 8px 24px rgba(0,0,0,.18); }
 .pc-event > button.pc-actions-toggle,.planning-event > button.pc-actions-toggle { position:absolute !important; inset:3px 3px auto auto !important; width:22px !important; min-width:22px !important; max-width:22px !important; height:22px !important; min-height:22px !important; margin:0 !important; display:flex !important; align-items:center; justify-content:center; border:0 !important; border-radius:4px; background:transparent !important; box-shadow:none !important; padding:0 !important; opacity:.8; z-index:5; color:var(--text-muted); font-size:14px; line-height:1; }
 .pc-event:hover .pc-actions-toggle,.planning-event:hover .pc-actions-toggle,.pc-actions-toggle:focus { opacity:1; }

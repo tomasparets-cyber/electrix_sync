@@ -42,8 +42,10 @@ scheduler_events = {
     "hourly": [
         "electrix_sync.api.sidebar.maintain_projects_customizations",
         "electrix_sync.api.sync.sync_employees",
+        "electrix_sync.api.outbound_sync.retry_failed_events",
     ],
     "cron": {
         "*/5 * * * *": ["electrix_sync.api.realtime_sync.sync_event_calendars"],
-    }
+    },
+    "daily": ["electrix_sync.api.sync.reconcile_events_daily"],
 }

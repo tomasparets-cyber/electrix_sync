@@ -21,5 +21,6 @@
 .planning-backlog-title span { background: var(--gray-200); border-radius: 10px; padding: 2px 8px; font-size: 12px; }
 .planning-search { margin-bottom: 12px; }
 .planning-event.is-backlog { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 3px solid var(--orange-400); padding: 11px; }
+.planning-event.has-sync-warning { border-left-color: var(--orange-500); background: var(--orange-50); }
 .planning-loading, .planning-empty { padding: 30px; color: var(--text-muted); text-align: center; }
 @media (max-width: 1100px) { .planning-shell { grid-template-columns: 1fr; } .planning-backlog { order: -1; } .planning-board { overflow-x: auto; } .planning-grid { min-width: 1000px; } }

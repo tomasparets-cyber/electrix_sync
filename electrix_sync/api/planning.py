@@ -42,6 +42,7 @@ def get_board(start_date=None, days=7):
         "status",
         "custom_stel_id",
         "custom_stel_calendar_id",
+        "custom_stel_sync_status",
         "custom_assigned_employee",
         "custom_planning_status",
         "custom_estimated_duration",

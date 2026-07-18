@@ -9,6 +9,7 @@ from frappe.utils import get_system_timezone, now, today, validate_email_address
 from frappe.utils.data import get_datetime
 
 from electrix_sync.api.stel import StelClient, StelPermissionError
+from electrix_sync.api.event_sync_state import event_hash_from_doc, event_hash_from_stel, stel_modified_at
 
 
 @frappe.whitelist()
@@ -212,8 +213,22 @@ def sync_events():
         status = sync_event(item)
         stats[status] += 1
 
+    calendar_ids = frappe.get_all(
+        "Employee",
+        filters={"status": "Active", "custom_stel_calendar_id": ["is", "set"]},
+        pluck="custom_stel_calendar_id",
+    )
+    stats["deleted"] = delete_missing_stel_events(items, calendar_ids)
+
     frappe.db.commit()
     return stats
+
+
+def reconcile_events_daily():
+    settings = frappe.get_single("Electrix Sync Settings")
+    if not settings.enabled or not getattr(settings, "sync_events", 0):
+        return {"skipped": "Event sync disabled"}
+    return sync_events()
 
 
 def sync_customer(item, settings):
@@ -404,7 +419,7 @@ def sync_incident(item, state_names=None, type_names=None):
         return "error"
 
 
-def sync_event(item, event_type_names=None):
+def sync_event(item, event_type_names=None, force=False):
     stel_id = get_stel_id(item)
     if not stel_id:
         log_sync("Event", "Skipped", None, message="Missing STEL ID", payload=item)
@@ -416,6 +431,18 @@ def sync_event(item, event_type_names=None):
 
         existing = frappe.db.get_value("Event", {"custom_stel_id": stel_id}, "name")
         doc = frappe.get_doc("Event", existing) if existing else frappe.new_doc("Event")
+
+        remote_hash = event_hash_from_stel(item)
+        if existing and not force:
+            baseline = doc.get("custom_stel_payload_hash")
+            local_hash = event_hash_from_doc(doc)
+            if baseline and remote_hash != baseline and local_hash != baseline:
+                from electrix_sync.api.outbound_sync import mark_event_conflict
+                mark_event_conflict(doc, item, "ERPNext and STEL changed since the last synchronization")
+                return "skipped"
+            if baseline and remote_hash == baseline and local_hash != baseline:
+                frappe.db.set_value("Event", doc.name, "custom_stel_sync_status", "Pending", update_modified=False)
+                return "skipped"
 
         doc.subject = (get_first(item, "subject", "description") or f"STEL Event {stel_id}")[:140]
         doc.event_type = "Private"
@@ -455,6 +482,11 @@ def sync_event(item, event_type_names=None):
             doc.custom_estimated_duration = max((end_dt - start_dt).total_seconds() / 3600, 0.25)
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
+        doc.custom_stel_payload_hash = remote_hash
+        doc.custom_stel_modified_at = stel_modified_at(item)
+        if has_field(doc, "custom_stel_last_error"):
+            doc.custom_stel_last_error = None
+            doc.custom_stel_conflict_payload = None
 
         doc.flags.skip_stel_outbound = True
         if existing:

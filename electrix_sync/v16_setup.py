@@ -36,7 +36,7 @@ def ensure_master_data_fields():
         {"fieldname": "custom_stel_modified_at", "label": "STEL Modified At", "fieldtype": "Datetime", "read_only": 1, "no_copy": 1},
         {"fieldname": "custom_stel_payload_hash", "label": "STEL Payload Hash", "fieldtype": "Data", "read_only": 1, "hidden": 1, "no_copy": 1},
         {"fieldname": "custom_stel_last_sync", "label": "STEL Last Sync", "fieldtype": "Datetime", "read_only": 1, "no_copy": 1},
-        {"fieldname": "custom_stel_sync_status", "label": "STEL Sync Status", "fieldtype": "Select", "options": "Pending\nSynced\nError\nSkipped", "read_only": 1, "no_copy": 1},
+        {"fieldname": "custom_stel_sync_status", "label": "STEL Sync Status", "fieldtype": "Select", "options": "Pending\nSynced\nError\nConflict\nSkipped", "read_only": 1, "no_copy": 1},
     ]
     fields = {
         "Customer": [
@@ -113,6 +113,8 @@ def ensure_master_data_fields():
             {**common[2], "insert_after": "custom_stel_modified_at"},
             {**common[3], "insert_after": "custom_stel_payload_hash"},
             {**common[4], "insert_after": "custom_stel_last_sync"},
+            {"fieldname": "custom_stel_last_error", "label": "Último error STEL", "fieldtype": "Small Text", "read_only": 1, "insert_after": "custom_stel_sync_status", "no_copy": 1},
+            {"fieldname": "custom_stel_conflict_payload", "label": "Conflicto STEL", "fieldtype": "Code", "options": "JSON", "read_only": 1, "hidden": 1, "insert_after": "custom_stel_last_error", "no_copy": 1},
         ],
     }
     available = {doctype: definitions for doctype, definitions in fields.items() if frappe.db.exists("DocType", doctype)}

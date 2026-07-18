@@ -118,6 +118,7 @@ class ElectrixPlanningCalendar {
 	eventsForDay(day) {
 		const cards = [];
 		for (const event of this.data.events.filter((row) => (row.starts_on || "").slice(0, 10) === day)) {
+			const syncWarning = ["Error", "Conflict", "Pending"].includes(event.custom_stel_sync_status) ? event.custom_stel_sync_status : null;
 			const employees = event.assigned_employees || [];
 			employees.forEach((employee, index) => {
 				if (!this.employeeById[employee]) return;
@@ -126,8 +127,8 @@ class ElectrixPlanningCalendar {
 				const top = start * 0.8;
 				const height = Math.max((end - start) * 0.8, 20);
 				const width = 94 / Math.max(employees.length, 1);
-				cards.push(`<div class="pc-event" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
-					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
+				cards.push(`<div class="pc-event ${syncWarning ? "has-sync-warning" : ""}" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
+					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}${syncWarning ? ` · STEL: ${syncWarning}` : ""}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
 				</div>`);
 			});
 		}
@@ -250,11 +251,17 @@ class ElectrixPlanningCalendar {
 				...this.eventFields(source),
 				{ fieldtype: "Button", fieldname: "duplicate", label: __("Duplicar evento"), click: () => this.duplicateEvent(source.name, dialog) },
 				{ fieldtype: "Button", fieldname: "unplan", label: __("Pasar a sin programar"), click: () => this.unplanEvent(source.name, dialog) },
+				...(source.custom_stel_sync_status === "Conflict" ? [
+					{ fieldtype: "Button", fieldname: "keep_erp", label: __("Resolver usando ERPNext"), click: () => this.resolveConflict(source.name, "erpnext", dialog) },
+					{ fieldtype: "Button", fieldname: "keep_stel", label: __("Resolver usando STEL"), click: () => this.resolveConflict(source.name, "stel", dialog) },
+				] : []),
 			],
 			primary_action_label: __("Guardar"),
 			primary_action: async (values) => {
 				delete values.duplicate;
 				delete values.unplan;
+				delete values.keep_erp;
+				delete values.keep_stel;
 				await frappe.call({
 					method: "electrix_sync.api.planning.edit_planned_event",
 					args: { event_name: source.name, ...this.eventPayload(values) },
@@ -319,6 +326,13 @@ class ElectrixPlanningCalendar {
 		await frappe.call({ method: "electrix_sync.api.planning.unplan_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Desprogramando evento…") });
 		dialog?.hide();
 		frappe.show_alert({ message: __("Evento desprogramado"), indicator: "green" });
+		await this.load();
+	}
+
+	async resolveConflict(eventName, resolution, dialog) {
+		await frappe.call({ method: "electrix_sync.api.outbound_sync.resolve_event_conflict", args: { event_name: eventName, resolution }, freeze: true, freeze_message: __("Resolviendo conflicto con STEL…") });
+		dialog?.hide();
+		frappe.show_alert({ message: __("Conflicto resuelto"), indicator: "green" });
 		await this.load();
 	}
 

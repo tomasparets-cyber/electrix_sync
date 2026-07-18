@@ -1,6 +1,7 @@
 frappe.ui.form.on("Event", {
 	refresh(frm) {
 		render_event_datetime_selectors(frm);
+		add_stel_sync_actions(frm);
 	},
 	async after_save(frm) {
 		if (frm.__electrix_syncing_event || (!frm.doc.custom_stel_id && !frm.doc.custom_stel_calendar_id)) return;
@@ -27,6 +28,28 @@ frappe.ui.form.on("Event", {
 		setTimeout(() => render_event_datetime_selector(frm, "ends_on", __("Fecha de fin"), __("Hora de fin")), 0);
 	},
 });
+
+function add_stel_sync_actions(frm) {
+	if (!frm.doc.custom_stel_id) return;
+	if (["Error", "Pending"].includes(frm.doc.custom_stel_sync_status)) {
+		frm.add_custom_button(__("Reintentar sincronización STEL"), () => sync_event_resolution(frm, "erpnext"), __("STEL"));
+	}
+	if (frm.doc.custom_stel_sync_status === "Conflict") {
+		frm.add_custom_button(__("Conservar ERPNext"), () => sync_event_resolution(frm, "erpnext"), __("Resolver conflicto STEL"));
+		frm.add_custom_button(__("Usar versión STEL"), () => sync_event_resolution(frm, "stel"), __("Resolver conflicto STEL"));
+	}
+}
+
+async function sync_event_resolution(frm, resolution) {
+	await frappe.call({
+		method: "electrix_sync.api.outbound_sync.resolve_event_conflict",
+		args: { event_name: frm.doc.name, resolution },
+		freeze: true,
+		freeze_message: __("Sincronizando evento con STEL…"),
+	});
+	frappe.show_alert({ message: __("Evento sincronizado con STEL"), indicator: "green" });
+	await frm.reload_doc();
+}
 
 function render_event_datetime_selectors(frm) {
 	render_event_datetime_selector(frm, "starts_on", __("Fecha de inicio"), __("Hora de inicio"));
