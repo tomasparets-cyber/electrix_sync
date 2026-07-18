@@ -149,41 +149,59 @@ def push_location(place_name):
     for link in place.stel_links:
         if not link.stel_address_id:
             continue
-        if is_default_address_link(link):
-            stel_customer_id = link.stel_customer_id or frappe.db.get_value("Customer", link.customer, "custom_stel_id")
-            if stel_customer_id:
-                client.update_customer(stel_customer_id, {"main-address": place_main_address_payload(place)})
-                mirror_place_to_primary_address(place, link.stel_address_id)
-                frappe.db.set_value("Lugar STEL Link", link.name, {
-                    "stel_address_type": "DEFAULT",
-                    "payload_hash": location_payload_hash(payload),
-                    "sync_enabled": 1,
-                    "sync_status": "Synced",
-                    "last_sync": now(),
-                }, update_modified=False)
-                updated.append(str(link.stel_address_id))
-            continue
-        client.update_address(link.stel_address_id, payload)
-        frappe.db.set_value("Lugar STEL Link", link.name, {
-            "payload_hash": location_payload_hash(payload),
-            "sync_enabled": 1,
-            "sync_status": "Synced",
-            "last_sync": now(),
-        }, update_modified=False)
-        updated.append(str(link.stel_address_id))
+        try:
+            if is_default_address_link(link, client):
+                stel_customer_id = link.stel_customer_id or frappe.db.get_value("Customer", link.customer, "custom_stel_id")
+                if stel_customer_id:
+                    client.update_customer(stel_customer_id, {"main-address": place_main_address_payload(place)})
+                    mirror_place_to_primary_address(place, link.stel_address_id)
+                    frappe.db.set_value("Lugar STEL Link", link.name, {
+                        "stel_address_type": "DEFAULT",
+                        "payload_hash": location_payload_hash(payload),
+                        "sync_enabled": 1,
+                        "sync_status": "Synced",
+                        "last_sync": now(),
+                    }, update_modified=False)
+                    updated.append(str(link.stel_address_id))
+                continue
+            client.update_address(link.stel_address_id, payload)
+            frappe.db.set_value("Lugar STEL Link", link.name, {
+                "payload_hash": location_payload_hash(payload),
+                "sync_enabled": 1,
+                "sync_status": "Synced",
+                "last_sync": now(),
+            }, update_modified=False)
+            updated.append(str(link.stel_address_id))
+        except Exception:
+            frappe.db.set_value("Lugar STEL Link", link.name, "sync_status", "Error", update_modified=False)
+            frappe.db.commit()
+            raise
     frappe.db.commit()
     return {"owner_address_id": owner_link.stel_address_id, "updated": updated}
 
 
-def is_default_address_link(link):
+def is_default_address_link(link, client=None):
     if str(link.get("stel_address_type") or "").upper() == "DEFAULT":
         return True
     if not link.get("stel_address_id"):
         return False
-    return bool(frappe.db.exists("Address", {
+    if frappe.db.exists("Address", {
         "custom_stel_id": str(link.stel_address_id),
         "is_primary_address": 1,
-    }))
+    }):
+        return True
+    # Some historical main addresses were imported before their STEL type was
+    # stored locally. Ask STEL for the authoritative type instead of trying a
+    # secondary-address PUT, which STEL rejects for DEFAULT addresses.
+    if client:
+        remote = client.get_address(link.stel_address_id)
+        remote_type = str(remote.get("address-type") or "").upper() if isinstance(remote, dict) else ""
+        if remote_type:
+            frappe.db.set_value(
+                "Lugar STEL Link", link.name, "stel_address_type", remote_type, update_modified=False
+            )
+        return remote_type == "DEFAULT"
+    return False
 
 
 def ensure_stel_location_link(place_name, customer):

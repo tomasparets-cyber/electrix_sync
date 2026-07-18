@@ -30,6 +30,9 @@ class StelClient:
         endpoint = getattr(self.settings, "addresses_endpoint", None) or "/app/addresses"
         return self.get_collection(endpoint)
 
+    def get_address(self, address_id):
+        return self._get_one(f"/app/addresses/{address_id}")
+
     def create_address(self, payload):
         return self._write("POST", "/app/addresses", payload)
 
