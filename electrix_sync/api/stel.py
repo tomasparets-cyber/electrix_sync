@@ -126,7 +126,12 @@ class StelClient:
         response = requests.request(method, url, headers=self._headers(), json=payload, timeout=30)
         if response.status_code == 403:
             raise StelPermissionError(f"STEL API permission denied for {response.url}.")
-        response.raise_for_status()
+        if not response.ok:
+            detail = (response.text or "").strip()[:1000]
+            message = f"{response.status_code} error from STEL for {response.url}"
+            if detail:
+                message += f": {detail}"
+            raise requests.HTTPError(message, response=response)
         return response.json() if response.content else {}
 
     def _get_one(self, endpoint):

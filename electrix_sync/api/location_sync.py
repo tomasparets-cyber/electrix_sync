@@ -33,7 +33,8 @@ def push_primary_address(address_name, customer):
         frappe.throw(_("Customer {0} must be synchronized before its primary address.").format(customer))
     try:
         payload = main_address_payload(address)
-        response = StelClient().update_customer(stel_customer_id, {"main-address": payload})
+        client = StelClient()
+        response = update_customer_main_address(client, stel_customer_id, payload)
         if address.meta.has_field("custom_stel_last_sync"):
             frappe.db.set_value("Address", address.name, {
                 "custom_stel_last_sync": now(),
@@ -66,6 +67,7 @@ def main_address_payload(address):
         "latitude": address.get("custom_stel_latitude"),
         "longitude": address.get("custom_stel_longitude"),
     }
+    discard_empty_coordinates(payload)
     return {key: value for key, value in payload.items() if value not in (None, "")}
 
 
@@ -79,7 +81,15 @@ def place_main_address_payload(place):
         "latitude": place.latitude,
         "longitude": place.longitude,
     }
+    discard_empty_coordinates(payload)
     return {key: value for key, value in payload.items() if value not in (None, "")}
+
+
+def discard_empty_coordinates(payload):
+    """Frappe Float fields use 0/0 for empty coordinates; do not send Null Island to STEL."""
+    if not payload.get("latitude") and not payload.get("longitude"):
+        payload.pop("latitude", None)
+        payload.pop("longitude", None)
 
 
 def mirror_primary_address_to_place(address):
@@ -151,7 +161,7 @@ def push_location(place_name):
             if is_default_address_link(link, client):
                 stel_customer_id = link.stel_customer_id or frappe.db.get_value("Customer", link.customer, "custom_stel_id")
                 if stel_customer_id:
-                    client.update_customer(stel_customer_id, {"main-address": place_main_address_payload(place)})
+                    update_customer_main_address(client, stel_customer_id, place_main_address_payload(place))
                     mirror_place_to_primary_address(place, link.stel_address_id)
                     frappe.db.set_value("Lugar STEL Link", link.name, {
                         "stel_address_type": "DEFAULT",
@@ -176,6 +186,18 @@ def push_location(place_name):
             raise
     frappe.db.commit()
     return {"owner_address_id": owner_link.stel_address_id, "updated": updated}
+
+
+def update_customer_main_address(client, stel_customer_id, payload):
+    """Update a main address, retrying legacy 0/0 coordinates without losing the real API error."""
+    try:
+        return client.update_customer(stel_customer_id, {"main-address": payload})
+    except Exception as error:
+        response = getattr(error, "response", None)
+        if getattr(response, "status_code", None) != 400 or not ({"latitude", "longitude"} & payload.keys()):
+            raise
+        compatible_payload = {key: value for key, value in payload.items() if key not in {"latitude", "longitude"}}
+        return client.update_customer(stel_customer_id, {"main-address": compatible_payload})
 
 
 def is_default_address_link(link, client=None):
@@ -273,13 +295,18 @@ def location_payload(place):
 def country_code(country):
     if not country:
         return None
+    if str(country).casefold() in {"spain", "españa"}:
+        return "ES"
     meta = frappe.get_meta("Country")
     for fieldname in ("code", "country_code"):
         if meta.has_field(fieldname):
             value = frappe.db.get_value("Country", country, fieldname)
             if value:
-                return str(value).upper()[:3]
-    return "ES" if str(country).casefold() in {"spain", "españa"} else None
+                value = str(value).strip().upper()
+                # STEL accepts ISO alpha-2 (plus ES1/ES2 for Spanish special
+                # territories), not arbitrary three-letter ERP country codes.
+                return value if len(value) == 2 or value in {"ES1", "ES2"} else None
+    return None
 
 
 def location_external_id(place_name, stel_customer_id):
