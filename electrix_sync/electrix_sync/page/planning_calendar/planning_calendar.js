@@ -50,13 +50,10 @@ class ElectrixPlanningCalendar {
 	}
 
 	addCalendarMenu() {
-		this.calendarMenu = $(`<div class="dropdown pc-calendar-menu">
-			<button class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
-				${frappe.utils.icon("calendar", "sm")} ${__("Calendarios")} <span class="caret"></span>
-			</button><div class="dropdown-menu dropdown-menu-right pc-calendar-options"></div>
-		</div>`);
-		this.page.inner_toolbar.append(this.calendarMenu);
-		this.calendarMenu.on("click", ".dropdown-menu", (event) => event.stopPropagation());
+		this.calendarOptions = this.page.add_custom_button_group(__("Calendarios"), "calendar");
+		this.calendarOptions.addClass("pc-calendar-options dropdown-menu-right");
+		this.calendarMenu = this.calendarOptions.closest(".custom-btn-group").addClass("pc-calendar-menu");
+		this.calendarOptions.on("click", (event) => event.stopPropagation());
 	}
 
 	startOfWeek(value) {
@@ -85,7 +82,7 @@ class ElectrixPlanningCalendar {
 			<input type="checkbox" data-employee="${row.name}" ${this.visibleEmployees.has(row.name) ? "checked" : ""}>
 			<span>${frappe.utils.escape_html(row.employee_name)}</span>
 		</label>`).join("");
-		this.calendarMenu.find(".pc-calendar-options").html(`<div class="pc-calendar-actions">
+		this.calendarOptions.html(`<div class="pc-calendar-actions">
 			<button class="btn btn-xs btn-default pc-select-all">${__("Todos")}</button>
 			<button class="btn btn-xs btn-default pc-select-none">${__("Ninguno")}</button>
 		</div>${rows || `<div class="dropdown-item text-muted">${__("No hay calendarios")}</div>`}`);
