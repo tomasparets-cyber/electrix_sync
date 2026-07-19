@@ -23,6 +23,16 @@ class ElectrixPlanning {
 	ensureComponentStyles() {
 		if (document.getElementById("electrix-planning-table-actions-style")) return;
 		$(document.head).append(`<style id="electrix-planning-table-actions-style">
+			.planning-shell { display:grid !important; grid-template-columns:minmax(0,1fr) 320px !important; gap:18px !important; height:calc(100vh - 190px) !important; min-height:480px !important; overflow:hidden !important; transition:grid-template-columns .2s ease !important; }
+			.planning-shell.is-backlog-collapsed { grid-template-columns:minmax(0,1fr) 42px !important; }
+			.planning-backlog-title { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; }
+			.planning-backlog-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; flex:1; }
+			.planning-backlog-toggle { width:28px !important; min-width:28px !important; height:28px !important; padding:0 !important; display:flex !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:6px !important; background:transparent !important; color:var(--text-muted) !important; box-shadow:none !important; }
+			.planning-backlog-toggle:hover,.planning-backlog-toggle:focus { background:var(--control-bg) !important; color:var(--text-color) !important; }
+			.is-backlog-collapsed .planning-backlog { padding:6px !important; }
+			.is-backlog-collapsed .planning-backlog-heading,.is-backlog-collapsed .planning-search,.is-backlog-collapsed .planning-backlog-list { display:none !important; }
+			.is-backlog-collapsed .planning-backlog-title { justify-content:center !important; margin:0 !important; }
+			@media (max-width:1100px) { .planning-shell { grid-template-columns:minmax(0,1fr) min(300px,38vw) !important; } .planning-shell.is-backlog-collapsed { grid-template-columns:minmax(0,1fr) 42px !important; } }
 			.planning-event > button.pc-actions-toggle {
 				position:absolute !important; inset:3px 3px auto auto !important;
 				width:22px !important; min-width:22px !important; max-width:22px !important;
@@ -164,7 +174,7 @@ class ElectrixPlanning {
 					</div>
 				</section>
 				<aside class="planning-backlog">
-					<div class="planning-backlog-title"><div class="planning-backlog-heading"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div><button type="button" class="planning-backlog-toggle" title="${this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel")}" aria-label="${this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar")}" aria-expanded="${!this.backlogCollapsed}">${this.backlogCollapsed ? "‹" : "›"}</button></div>
+					<div class="planning-backlog-title"><div class="planning-backlog-heading"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div><button type="button" class="planning-backlog-toggle" title="${this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel")}" aria-label="${this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar")}" aria-expanded="${!this.backlogCollapsed}">${frappe.utils.icon(this.backlogCollapsed ? "chevron-left" : "chevron-right", "sm")}</button></div>
 					<input class="form-control planning-search" placeholder="${__("Buscar")}">
 					<div class="planning-backlog-list">${unplanned || `<div class="planning-empty">${__("No hay eventos pendientes")}</div>`}</div>
 				</aside>
@@ -247,7 +257,7 @@ class ElectrixPlanning {
 		window.localStorage.setItem("electrix-planning-backlog-collapsed", this.backlogCollapsed ? "1" : "0");
 		this.page.main.find(".planning-shell").toggleClass("is-backlog-collapsed", this.backlogCollapsed);
 		const button = this.page.main.find(".planning-backlog-toggle");
-		button.text(this.backlogCollapsed ? "‹" : "›")
+		button.html(frappe.utils.icon(this.backlogCollapsed ? "chevron-left" : "chevron-right", "sm"))
 			.attr("aria-expanded", String(!this.backlogCollapsed))
 			.attr("aria-label", this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar"))
 			.attr("title", this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel"));

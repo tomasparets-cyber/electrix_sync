@@ -433,12 +433,12 @@ def add_projects_sidebar_items():
                 "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
                 "parenttype": "Workspace Sidebar", "parentfield": "items",
                 "idx": len(desired_links) + 1, "label": "Planificación", "type": "Section Break",
-                "child": 0, "collapsible": 1, "indent": 0, "show_arrow": 0, "keep_closed": 1,
+                "child": 0, "collapsible": 1, "indent": 1, "show_arrow": 0, "keep_closed": 1,
             }).insert(ignore_permissions=True)
             ordered_names.append(section.name)
             for idx, item_data in enumerate((
-                {"label": "Tabla", "link_type": "Page", "link_to": "planning", "icon": "table"},
-                {"label": "Calendario", "link_type": "Page", "link_to": "planning-calendar", "icon": "calendar"},
+                {"label": "Tabla", "link_type": "Page", "link_to": "planning"},
+                {"label": "Calendario", "link_type": "Page", "link_to": "planning-calendar"},
             ), start=len(desired_links) + 2):
                 row = frappe.get_doc({
                     "doctype": "Workspace Sidebar Item", "parent": sidebar_name,
