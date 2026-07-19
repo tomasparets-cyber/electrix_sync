@@ -25,6 +25,9 @@ class ElectrixPlanning {
 		$(document.head).append(`<style id="electrix-planning-table-actions-style">
 			.planning-shell { display:grid !important; grid-template-columns:minmax(0,1fr) 320px !important; gap:18px !important; height:calc(100vh - 190px) !important; min-height:480px !important; overflow:hidden !important; transition:grid-template-columns .2s ease !important; }
 			.planning-shell.is-backlog-collapsed { grid-template-columns:minmax(0,1fr) 42px !important; }
+			.planning-shell .planning-board { display:flex !important; flex-direction:column !important; min-width:0 !important; min-height:0 !important; height:100% !important; overflow:hidden !important; }
+			.planning-shell .planning-table-scroll { flex:1 1 auto !important; min-width:0 !important; min-height:0 !important; height:0 !important; overflow:auto !important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+			.planning-shell .planning-grid-header { position:sticky !important; top:0 !important; z-index:4 !important; }
 			.planning-backlog-title { display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; }
 			.planning-backlog-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; flex:1; }
 			.planning-backlog-toggle { width:28px !important; min-width:28px !important; height:28px !important; padding:0 !important; display:flex !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:6px !important; background:transparent !important; color:var(--text-muted) !important; box-shadow:none !important; }
