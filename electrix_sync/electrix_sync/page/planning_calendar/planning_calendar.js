@@ -8,6 +8,7 @@ class ElectrixPlanningCalendar {
 		this.ensureComponentStyles();
 		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.visibleEmployees = new Set();
+		this.backlogCollapsed = window.localStorage.getItem("electrix-planning-backlog-collapsed") === "1";
 		this.page.add_inner_button(__("Anterior"), () => this.shift(-7));
 		this.page.add_inner_button(__("Hoy"), () => { this.startDate = this.startOfWeek(frappe.datetime.get_today()); this.load(); });
 		this.page.add_inner_button(__("Siguiente"), () => this.shift(7));
@@ -107,10 +108,10 @@ class ElectrixPlanningCalendar {
 		const dayColumns = this.data.days.map((day) => `<div class="pc-day" data-day="${day}">${this.eventsForDay(day)}</div>`).join("");
 		const hours = Array.from({ length: 24 }, (_, hour) => `<div class="pc-hour">${String(hour).padStart(2, "0")}:00</div>`).join("");
 		const unplanned = this.data.unplanned.map((event) => this.backlogCard(event)).join("");
-		this.page.main.html(`<div class="pc-planning-shell">
+		this.page.main.html(`<div class="pc-planning-shell ${this.backlogCollapsed ? "is-backlog-collapsed" : ""}">
 			<section class="pc-calendar"><div class="pc-header"><div></div>${headers}</div><div class="pc-body"><div class="pc-hours">${hours}</div>${dayColumns}</div></section>
 			<aside class="planning-backlog">
-				<div class="planning-backlog-title"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div>
+				<div class="planning-backlog-title"><div class="planning-backlog-heading"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div><button type="button" class="planning-backlog-toggle" title="${this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel")}" aria-label="${this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar")}" aria-expanded="${!this.backlogCollapsed}">${this.backlogCollapsed ? "‹" : "›"}</button></div>
 				<input class="form-control planning-search" placeholder="${__("Buscar")}">
 				<div class="planning-backlog-list">${unplanned || `<div class="planning-empty">${__("No hay eventos pendientes")}</div>`}</div>
 			</aside>
@@ -160,6 +161,7 @@ class ElectrixPlanningCalendar {
 		});
 		this.page.main.find(".pc-resize").on("pointerdown", (event) => this.startResize(event));
 		this.page.main.find(".pc-actions-toggle").on("click", (event) => this.showActionsMenu(event));
+		this.page.main.find(".planning-backlog-toggle").on("click", () => this.toggleBacklog());
 		this.page.main.find(".pc-day").on("click", (event) => {
 			if (event.target !== event.currentTarget) return;
 			const rect = event.currentTarget.getBoundingClientRect();
@@ -183,11 +185,23 @@ class ElectrixPlanningCalendar {
 		});
 	}
 
+	toggleBacklog() {
+		this.backlogCollapsed = !this.backlogCollapsed;
+		window.localStorage.setItem("electrix-planning-backlog-collapsed", this.backlogCollapsed ? "1" : "0");
+		this.page.main.find(".pc-planning-shell").toggleClass("is-backlog-collapsed", this.backlogCollapsed);
+		const button = this.page.main.find(".planning-backlog-toggle");
+		button.text(this.backlogCollapsed ? "‹" : "›")
+			.attr("aria-expanded", String(!this.backlogCollapsed))
+			.attr("aria-label", this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar"))
+			.attr("title", this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel"));
+	}
+
 	startMove(event) {
 		event.preventDefault();
 		const card = event.currentTarget;
 		const originX = event.originalEvent.clientX;
 		const originY = event.originalEvent.clientY;
+		const grabOffsetMinutes = Math.max(0, (originY - card.getBoundingClientRect().top) / 0.8);
 		const duration = Math.max(this.datetimeMinutes(card.dataset.end) - this.datetimeMinutes(card.dataset.start), 15);
 		this.didManipulate = false;
 		card.classList.add("is-moving");
@@ -203,7 +217,7 @@ class ElectrixPlanningCalendar {
 			const dayColumn = document.elementFromPoint(pointerEvent.clientX, pointerEvent.clientY)?.closest(".pc-day");
 			if (!dayColumn) return;
 			const rect = dayColumn.getBoundingClientRect();
-			const minutes = this.snapMinutes((pointerEvent.clientY - rect.top) / 0.8);
+			const minutes = this.snapMinutes((pointerEvent.clientY - rect.top) / 0.8 - grabOffsetMinutes);
 			await this.persistTime(card.dataset.event, this.dateTime(dayColumn.dataset.day, minutes), this.dateTime(dayColumn.dataset.day, minutes + duration));
 		};
 		document.addEventListener("pointermove", move); document.addEventListener("pointerup", up, { once: true });

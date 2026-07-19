@@ -13,6 +13,7 @@ class ElectrixPlanning {
 		this.startDate = this.startOfWeek(frappe.datetime.get_today());
 		this.draggedEvent = null;
 		this.wasDragging = false;
+		this.backlogCollapsed = window.localStorage.getItem("electrix-planning-backlog-collapsed") === "1";
 		this.visibleEmployees = new Set();
 		this.buildActions();
 		this.addCalendarMenu();
@@ -152,7 +153,7 @@ class ElectrixPlanning {
 		const unplanned = this.data.unplanned.map((event) => this.eventCard(event, true)).join("");
 
 		this.page.main.html(`
-			<div class="planning-shell">
+			<div class="planning-shell ${this.backlogCollapsed ? "is-backlog-collapsed" : ""}">
 				<section class="planning-board">
 					<div class="planning-period">${this.monthHeading(days[0])}</div>
 					<div class="planning-table-scroll">
@@ -163,7 +164,7 @@ class ElectrixPlanning {
 					</div>
 				</section>
 				<aside class="planning-backlog">
-					<div class="planning-backlog-title"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div>
+					<div class="planning-backlog-title"><div class="planning-backlog-heading"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div><button type="button" class="planning-backlog-toggle" title="${this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel")}" aria-label="${this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar")}" aria-expanded="${!this.backlogCollapsed}">${this.backlogCollapsed ? "‹" : "›"}</button></div>
 					<input class="form-control planning-search" placeholder="${__("Buscar")}">
 					<div class="planning-backlog-list">${unplanned || `<div class="planning-empty">${__("No hay eventos pendientes")}</div>`}</div>
 				</aside>
@@ -219,6 +220,7 @@ class ElectrixPlanning {
 				if (!this.wasDragging) this.editEvent(event.currentTarget.dataset.event);
 			});
 		this.page.main.find(".pc-actions-toggle").on("click", (event) => this.showActionsMenu(event));
+		this.page.main.find(".planning-backlog-toggle").on("click", () => this.toggleBacklog());
 		this.page.main.find(".planning-cell").on("dragover", (event) => {
 			event.preventDefault();
 			event.currentTarget.classList.add("is-over");
@@ -238,6 +240,17 @@ class ElectrixPlanning {
 				card.style.display = card.dataset.search.includes(value) ? "" : "none";
 			});
 		});
+	}
+
+	toggleBacklog() {
+		this.backlogCollapsed = !this.backlogCollapsed;
+		window.localStorage.setItem("electrix-planning-backlog-collapsed", this.backlogCollapsed ? "1" : "0");
+		this.page.main.find(".planning-shell").toggleClass("is-backlog-collapsed", this.backlogCollapsed);
+		const button = this.page.main.find(".planning-backlog-toggle");
+		button.text(this.backlogCollapsed ? "‹" : "›")
+			.attr("aria-expanded", String(!this.backlogCollapsed))
+			.attr("aria-label", this.backlogCollapsed ? __("Mostrar panel Sin planificar") : __("Ocultar panel Sin planificar"))
+			.attr("title", this.backlogCollapsed ? __("Mostrar panel") : __("Ocultar panel"));
 	}
 
 	showActionsMenu(event) {

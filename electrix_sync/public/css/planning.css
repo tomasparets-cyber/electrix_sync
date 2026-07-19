@@ -1,4 +1,5 @@
-.planning-shell { display: grid; grid-template-columns: minmax(760px, 1fr) 320px; gap: 18px; height: calc(100vh - 190px); min-height: 480px; overflow: hidden; }
+.planning-shell { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:18px; height:calc(100vh - 190px); min-height:480px; overflow:hidden; transition:grid-template-columns .2s ease; }
+.planning-shell.is-backlog-collapsed { grid-template-columns:minmax(0,1fr) 42px; }
 .planning-board, .planning-backlog { min-height: 0; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
 .planning-board { display: flex; flex-direction: column; }
 .planning-period { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--border-color); }
@@ -19,10 +20,16 @@
 .planning-backlog { display: flex; flex-direction: column; background: var(--subtle-fg); padding: 14px; }
 .planning-backlog-list { min-height: 0; flex: 1; overflow-y: auto; border-radius: 8px; transition: background .15s, outline .15s; }
 .planning-backlog-list.is-over { background: var(--orange-50); outline: 2px dashed var(--orange-400); outline-offset: 4px; }
-.planning-backlog-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 16px; }
-.planning-backlog-title span { background: var(--gray-200); border-radius: 10px; padding: 2px 8px; font-size: 12px; }
+.planning-backlog-title { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px; font-size:16px; }
+.planning-backlog-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; flex:1; }
+.planning-backlog-title span { background:var(--gray-200); border-radius:10px; padding:2px 8px; font-size:12px; }
+.planning-backlog-toggle { width:28px; min-width:28px; height:28px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--text-muted); font-size:22px; line-height:1; }
+.planning-backlog-toggle:hover,.planning-backlog-toggle:focus { background:var(--control-bg); color:var(--text-color); }
+.is-backlog-collapsed .planning-backlog { padding:6px; }
+.is-backlog-collapsed .planning-backlog-heading,.is-backlog-collapsed .planning-search,.is-backlog-collapsed .planning-backlog-list { display:none; }
+.is-backlog-collapsed .planning-backlog-title { justify-content:center; margin:0; }
 .planning-search { margin-bottom: 12px; }
 .planning-event.is-backlog { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 3px solid var(--orange-400); padding: 11px; }
 .planning-event.has-sync-warning { border-left-color: var(--orange-500); background: var(--orange-50); }
 .planning-loading, .planning-empty { padding: 30px; color: var(--text-muted); text-align: center; }
-@media (max-width: 1100px) { .planning-shell { grid-template-columns: 1fr; height: auto; overflow: visible; } .planning-backlog { order: -1; max-height: 300px; } .planning-board { height: calc(100vh - 210px); min-height: 480px; } .planning-grid { min-width: 1000px; } }
+@media (max-width:1100px) { .planning-shell { grid-template-columns:minmax(0,1fr) min(300px,38vw); } .planning-shell.is-backlog-collapsed { grid-template-columns:minmax(0,1fr) 42px; } .planning-grid { min-width:1000px; } }
