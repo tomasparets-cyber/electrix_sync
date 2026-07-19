@@ -49,7 +49,10 @@ def get_board(start_date=None, days=7):
     ]
     if frappe.get_meta("Event").has_field("event_category"):
         fields.append("event_category")
-    for fieldname in ("location", "custom_service_location", "reference_doctype", "reference_docname"):
+    for fieldname in (
+        "location", "custom_service_location", "custom_account_type", "custom_account",
+        "reference_doctype", "reference_docname",
+    ):
         if frappe.get_meta("Event").has_field(fieldname):
             fields.append(fieldname)
     planned = frappe.get_all(
@@ -226,7 +229,8 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
 
 
 @frappe.whitelist()
-def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employees=None):
+def create_planned_event(employee, subject, starts_on, ends_on, description=None, event_category=None,
+                         status="Open", location=None, account_type=None, account=None, employees=None):
     check_planning_access()
     employee_doc = frappe.get_doc("Employee", employee)
     if not employee_doc.get("custom_stel_calendar_id"):
@@ -244,6 +248,7 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
     event.status = normalize_event_status(status)
     if event.meta.has_field("event_category"):
         event.event_category = event_category or None
+    set_event_account(event, account_type, account)
     set_event_location(event, location)
     event.custom_assigned_employee = employee
     event.custom_stel_calendar_id = str(employee_doc.custom_stel_calendar_id)
@@ -260,7 +265,9 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
 
 
 @frappe.whitelist()
-def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_category=None, status="Open", location=None, employee=None, employees=None):
+def edit_planned_event(event_name, subject, starts_on, ends_on, description=None, event_category=None,
+                       status="Open", location=None, account_type=None, account=None,
+                       employee=None, employees=None):
     check_planning_access()
     event = frappe.get_doc("Event", event_name)
     starts_on = get_datetime(starts_on)
@@ -274,6 +281,7 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
     event.status = normalize_event_status(status)
     if event.meta.has_field("event_category"):
         event.event_category = event_category or None
+    set_event_account(event, account_type, account)
     set_event_location(event, location)
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     employee = employee or event.get("custom_assigned_employee")
@@ -397,6 +405,8 @@ def duplicate_event(event_name, starts_on=None, employee=None):
         employee=employee, subject=source.subject, starts_on=start, ends_on=start + duration,
         description=source.description, event_category=source.get("event_category"), status=source.status,
         location=source.get("custom_service_location") or None,
+        account_type=source.get("custom_account_type") or source.get("reference_doctype"),
+        account=source.get("custom_account") or source.get("reference_docname"),
     )
 
 
@@ -532,10 +542,25 @@ def get_catalog_id(resource_type, name):
 def add_standard_event_relations(event, payload):
     if event.meta.has_field("location") and event.get("location"):
         payload["location"] = str(event.location)[:128]
-    if event.get("reference_doctype") == "Customer" and event.get("reference_docname"):
-        account_id = frappe.db.get_value("Customer", event.reference_docname, "custom_stel_id")
+    account_type = event.get("custom_account_type") or event.get("reference_doctype")
+    account = event.get("custom_account") or event.get("reference_docname")
+    if account_type in {"Customer", "Lead"} and account:
+        from electrix_sync.api.account_sync import ensure_account_synced
+        account_id = ensure_account_synced(account_type, account)
         if account_id:
             payload["account-id"] = int(account_id)
+
+
+def set_event_account(event, account_type, account):
+    account_type = account_type if account_type in {"Customer", "Lead"} else None
+    account = account if account_type and account and frappe.db.exists(account_type, account) else None
+    if event.meta.has_field("custom_account_type"):
+        event.custom_account_type = account_type
+    if event.meta.has_field("custom_account"):
+        event.custom_account = account
+    if event.meta.has_field("reference_doctype") and event.meta.has_field("reference_docname"):
+        event.reference_doctype = account_type
+        event.reference_docname = account
 
 
 def set_event_location(event, place_name):

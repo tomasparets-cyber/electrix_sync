@@ -112,21 +112,22 @@ def import_customer(row, settings):
         "custom_stel_payload_hash": row["payload_hash"],
     }
     update_existing_fields(doc, values)
+    doc.flags.skip_stel_outbound = True
     doc.save(ignore_permissions=True) if existing else doc.insert(ignore_permissions=True)
     return "updated" if existing else "created"
 
 
 def import_address(row):
     data = row["data"]
-    customer = customer_for_account(data.get("account-id"))
-    if not customer:
+    party_type, party_name = account_for_stel_id(data.get("account-id"))
+    if not party_name:
         return "skipped"
     existing = get_existing("Address", row["remote_id"])
     if existing and existing.custom_stel_payload_hash == row["payload_hash"]:
         return "unchanged"
     doc = frappe.get_doc("Address", existing.name) if existing else frappe.new_doc("Address")
     values = {
-        "address_title": clean(data.get("name")) or customer,
+        "address_title": clean(data.get("name")) or party_name,
         "address_type": "Billing",
         "address_line1": clean(data.get("address-data")) or clean(data.get("formatted-address")) or _("Sin dirección"),
         "address_line2": clean(data.get("extra-data")),
@@ -145,7 +146,7 @@ def import_address(row):
         "custom_stel_payload_hash": row["payload_hash"],
     }
     update_existing_fields(doc, values)
-    ensure_dynamic_link(doc, "Customer", customer)
+    ensure_dynamic_link(doc, party_type, party_name)
     doc.flags.skip_stel_outbound = True
     doc.save(ignore_permissions=True) if existing else doc.insert(ignore_permissions=True)
     return "updated" if existing else "created"
@@ -184,20 +185,25 @@ def import_contact(row):
     return "updated" if existing else "created"
 
 
-def import_place(row):
+def import_place(row, party_type=None, party_name=None):
     data = row["data"]
     existing_parent = frappe.db.get_value("Lugar STEL Link", {"stel_address_id": row["remote_id"]}, "parent")
     location_key = get_location_key(data)
     if not existing_parent and location_key:
         existing_parent = frappe.db.get_value("Lugar", {"location_key": location_key}, "name")
     doc = frappe.get_doc("Lugar", existing_parent) if existing_parent else frappe.new_doc("Lugar")
-    customer = customer_for_account(data.get("account-id"))
+    if not party_name:
+        party_type, party_name = account_for_stel_id(data.get("account-id"))
     link = next((x for x in doc.stel_links if str(x.stel_address_id) == row["remote_id"]), None)
     if link and link.payload_hash == row["payload_hash"] and link.get("stel_address_type"):
         return "unchanged"
-    if not doc.get("owner_customer") and customer:
-        doc.owner_customer = customer
-    is_owner_copy = bool(customer and customer == doc.get("owner_customer"))
+    if not doc.get("owner_name") and party_name:
+        doc.owner_doctype = party_type
+        doc.owner_name = party_name
+        doc.owner_customer = party_name if party_type == "Customer" else None
+    owner_type = doc.get("owner_doctype") or "Customer"
+    owner_name = doc.get("owner_name") or doc.get("owner_customer")
+    is_owner_copy = bool(party_name and (party_type, party_name) == (owner_type, owner_name))
     # Only the owner's STEL address is authoritative. Copies created below
     # other accounts merely add a link to the same physical ERPNext Lugar.
     if not existing_parent or is_owner_copy:
@@ -216,14 +222,16 @@ def import_place(row):
         })
     if not link:
         link = doc.append("stel_links", {})
-    link.customer = customer
+    link.party_type = party_type or "Customer"
+    link.party_name = party_name
+    link.customer = party_name if party_type == "Customer" else None
     link.stel_customer_id = str(data.get("account-id")) if data.get("account-id") is not None else None
     link.stel_address_id = row["remote_id"]
     link.stel_address_type = (data.get("address-type") or "OTHER").upper()
     link.is_owner_link = 1 if is_owner_copy else 0
     link.payload_hash = row["payload_hash"]
     link.sync_enabled = 0
-    link.sync_status = "Linked" if customer else "Local"
+    link.sync_status = "Linked" if party_name else "Local"
     link.last_sync = now()
     doc.flags.skip_stel_outbound = True
     doc.save(ignore_permissions=True) if existing_parent else doc.insert(ignore_permissions=True)
@@ -304,6 +312,16 @@ def resolve_country(code):
 
 def customer_for_account(account_id):
     return frappe.db.get_value("Customer", {"custom_stel_id": str(account_id)}, "name") if account_id is not None else None
+
+
+def account_for_stel_id(account_id):
+    if account_id is None:
+        return None, None
+    customer = customer_for_account(account_id)
+    if customer:
+        return "Customer", customer
+    lead = frappe.db.get_value("Lead", {"custom_stel_id": str(account_id)}, "name")
+    return ("Lead", lead) if lead else (None, None)
 
 
 def ensure_dynamic_link(doc, link_doctype, link_name):

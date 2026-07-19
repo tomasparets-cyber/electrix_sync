@@ -262,6 +262,9 @@ def sync_customer(item, settings):
         doc.custom_stel_id = stel_id
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
+        doc.flags.skip_stel_outbound = True
+        if has_field(doc, "disabled"):
+            doc.disabled = 1 if item.get("deleted") is True else 0
 
         tax_id = get_first(
             item,
@@ -292,7 +295,7 @@ def sync_customer(item, settings):
             doc.insert(ignore_permissions=True)
             action = "created"
 
-        sync_billing_address(item, doc.name)
+        sync_billing_address(item, doc.name, "Customer")
 
         log_sync("Customer", "Success", stel_id, "Customer", doc.name, f"Customer {action}", payload=item)
         return action
@@ -329,13 +332,14 @@ def sync_lead(item, settings):
         doc.company_name = (
             get_first(item, "legal-name", "companyName", "company_name", "commercialName", "legalName") or lead_name
         )
-        doc.status = doc.get("status") or "Lead"
+        doc.status = "Do Not Contact" if item.get("deleted") is True else (doc.get("status") or "Lead")
         doc.source = settings.default_lead_source or doc.get("source")
         doc.email_id = get_first(item, "email", "emailId", "email_id")
         doc.mobile_no = get_phone(item, "mobile", "mobileNo", "mobile_no", "phone", "phone2", "telephone", "telefono")
         doc.custom_stel_id = stel_id
         doc.custom_stel_last_sync = now()
         doc.custom_stel_sync_status = "Synced"
+        doc.flags.skip_stel_outbound = True
 
         if existing:
             doc.save(ignore_permissions=True)
@@ -343,6 +347,8 @@ def sync_lead(item, settings):
         else:
             doc.insert(ignore_permissions=True)
             action = "created"
+
+        sync_billing_address(item, doc.name, "Lead")
 
         log_sync("Lead", "Success", stel_id, "Lead", doc.name, f"Lead {action}", payload=item)
         return action
@@ -456,10 +462,14 @@ def sync_event(item, event_type_names=None, force=False):
         doc.description = build_event_description(item)
         if has_field(doc, "location"):
             doc.location = get_first(item, "location") or None
-        customer = get_customer_by_stel_id(get_first(item, "account-id", "accountId"))
-        if customer and has_field(doc, "reference_doctype") and has_field(doc, "reference_docname"):
-            doc.reference_doctype = "Customer"
-            doc.reference_docname = customer
+        account_type, account = get_account_by_stel_id(get_first(item, "account-id", "accountId"))
+        if account and has_field(doc, "reference_doctype") and has_field(doc, "reference_docname"):
+            doc.reference_doctype = account_type
+            doc.reference_docname = account
+        if has_field(doc, "custom_account_type"):
+            doc.custom_account_type = account_type or None
+        if has_field(doc, "custom_account"):
+            doc.custom_account = account or None
         doc.custom_stel_id = stel_id
         event_type_id = get_first(item, "event-type-id", "eventTypeId")
         if event_type_id and has_field(doc, "event_category"):
@@ -1088,6 +1098,17 @@ def get_lead_by_stel_id(stel_lead_id):
     return frappe.db.get_value("Lead", {"custom_stel_id": str(stel_lead_id)}, "name")
 
 
+def get_account_by_stel_id(stel_account_id):
+    """Resolve STEL's shared event account-id to an ERPNext client or potential."""
+    if stel_account_id in (None, ""):
+        return None, None
+    customer = get_customer_by_stel_id(stel_account_id)
+    if customer:
+        return "Customer", customer
+    lead = get_lead_by_stel_id(stel_account_id)
+    return ("Lead", lead) if lead else (None, None)
+
+
 def get_project_by_stel_address_id(stel_address_id):
     if not stel_address_id or not frappe.db.exists("DocType", "Project"):
         return None
@@ -1324,21 +1345,21 @@ def get_territory(settings, doc):
     return settings.default_territory or doc.get("territory") or "All Territories"
 
 
-def sync_billing_address(item, customer_name):
+def sync_billing_address(item, party_name, party_type="Customer"):
     address_data = item.get("main-address") if isinstance(item, dict) else None
     if not isinstance(address_data, dict):
         return None
 
     stel_address_id = get_stel_id(address_data)
     if not stel_address_id:
-        log_sync("Address", "Skipped", None, "Customer", customer_name, "Missing STEL address ID", payload=address_data)
+        log_sync("Address", "Skipped", None, party_type, party_name, "Missing STEL address ID", payload=address_data)
         return None
 
     try:
         existing = frappe.db.get_value("Address", {"custom_stel_id": stel_address_id}, "name")
         address = frappe.get_doc("Address", existing) if existing else frappe.new_doc("Address")
 
-        address.address_title = get_address_title(address_data, customer_name)
+        address.address_title = get_address_title(address_data, party_name)
         address.address_type = "Billing"
         address.address_line1 = get_address_line1(address_data)
         address.address_line2 = get_first(address_data, "extra-data", "extraData") or None
@@ -1352,7 +1373,7 @@ def sync_billing_address(item, customer_name):
         address.custom_stel_last_sync = now()
         address.custom_stel_sync_status = "Synced"
 
-        ensure_dynamic_link(address, "Customer", customer_name)
+        ensure_dynamic_link(address, party_type, party_name)
         address.flags.skip_stel_outbound = True
 
         if existing:
@@ -1362,6 +1383,14 @@ def sync_billing_address(item, customer_name):
             address.insert(ignore_permissions=True)
             action = "created"
 
+        from electrix_sync.api.master_data import import_place
+        payload = json.dumps(address_data, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        import_place({
+            "remote_id": str(stel_address_id),
+            "payload_hash": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            "data": address_data,
+        }, party_type=party_type, party_name=party_name)
+
         log_sync("Address", "Success", stel_address_id, "Address", address.name, f"Billing address {action}", payload=address_data)
         return action
     except Exception:
@@ -1370,8 +1399,8 @@ def sync_billing_address(item, customer_name):
             "Address",
             "Error",
             stel_address_id,
-            "Customer",
-            customer_name,
+            party_type,
+            party_name,
             "Billing address sync failed",
             traceback.format_exc(),
             address_data,

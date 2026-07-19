@@ -335,8 +335,11 @@ def task_relations(doc):
 
 
 def event_account_id(doc):
-    if doc.get("reference_doctype") == "Customer" and doc.get("reference_docname"):
-        return frappe.db.get_value("Customer", doc.reference_docname, "custom_stel_id")
+    account_type = doc.get("custom_account_type") or doc.get("reference_doctype")
+    account = doc.get("custom_account") or doc.get("reference_docname")
+    if account_type in {"Customer", "Lead"} and account:
+        from electrix_sync.api.account_sync import ensure_account_synced
+        return ensure_account_synced(account_type, account)
     return None
 
 

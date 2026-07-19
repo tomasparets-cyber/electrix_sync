@@ -12,29 +12,32 @@ def enqueue_primary_address(doc, method=None):
     """Push ERPNext's primary customer Address through STEL's client API."""
     if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
         return
-    if not doc.get("is_primary_address") or not doc.get("custom_stel_id"):
+    if not doc.get("is_primary_address"):
         return
-    customer = primary_address_customer(doc)
-    if not customer:
+    parties = primary_address_parties(doc)
+    if not parties:
         return
-    frappe.enqueue(
-        "electrix_sync.api.location_sync.push_primary_address",
-        queue="short",
-        enqueue_after_commit=True,
-        address_name=doc.name,
-        customer=customer,
-    )
+    for party_type, party_name in parties:
+        frappe.enqueue(
+            "electrix_sync.api.location_sync.push_primary_address",
+            queue="short",
+            enqueue_after_commit=True,
+            address_name=doc.name,
+            party_type=party_type,
+            party_name=party_name,
+        )
 
 
-def push_primary_address(address_name, customer):
+def push_primary_address(address_name, party_type=None, party_name=None, customer=None):
     address = frappe.get_doc("Address", address_name)
-    stel_customer_id = frappe.db.get_value("Customer", customer, "custom_stel_id")
+    party_type, party_name = party_type or "Customer", party_name or customer
+    stel_customer_id = account_stel_id(party_type, party_name)
     if not stel_customer_id:
-        frappe.throw(_("Customer {0} must be synchronized before its primary address.").format(customer))
+        frappe.throw(_("Account {0} must be synchronized before its primary address.").format(party_name))
     try:
         payload = main_address_payload(address)
         client = StelClient()
-        response = update_customer_main_address(client, stel_customer_id, payload)
+        response = update_account_main_address(client, party_type, stel_customer_id, payload)
         if address.meta.has_field("custom_stel_last_sync"):
             frappe.db.set_value("Address", address.name, {
                 "custom_stel_last_sync": now(),
@@ -51,15 +54,27 @@ def push_primary_address(address_name, customer):
 
 
 def primary_address_customer(address):
-    for link in address.get("links", []):
-        if link.link_doctype == "Customer" and link.link_name:
-            return link.link_name
-    return None
+    party = primary_address_party(address)
+    return party[1] if party and party[0] == "Customer" else None
+
+
+def primary_address_party(address):
+    parties = primary_address_parties(address)
+    return parties[0] if parties else None
+
+
+def primary_address_parties(address):
+    return list(dict.fromkeys(
+        (link.link_doctype, link.link_name)
+        for link in address.get("links", [])
+        if link.link_doctype in {"Customer", "Lead"} and link.link_name
+    ))
 
 
 def main_address_payload(address):
     payload = {
         "address-data": optional_text(address.address_line1, 256),
+        "extra-data": optional_text(address.address_line2, 128),
         "postal-code": optional_text(address.pincode, 10),
         "province": optional_text(address.state, 64),
         "city-town": optional_text(address.city, 64),
@@ -95,9 +110,27 @@ def discard_empty_coordinates(payload):
 def mirror_primary_address_to_place(address):
     if not frappe.db.exists("DocType", "Lugar STEL Link"):
         return
-    place_name = frappe.db.get_value(
-        "Lugar STEL Link", {"stel_address_id": str(address.custom_stel_id)}, "parent"
-    )
+    place_name = None
+    if address.get("custom_stel_id"):
+        place_name = frappe.db.get_value(
+            "Lugar STEL Link", {"stel_address_id": str(address.custom_stel_id)}, "parent"
+        )
+    if not place_name:
+        party = primary_address_party(address)
+        if party:
+            from electrix_sync.api.master_data import get_location_key
+            location_key = get_location_key({
+                "address-data": address.address_line1,
+                "postal-code": address.pincode,
+                "city-town": address.city,
+                "province": address.state,
+                "country-code": country_code(address.country),
+            })
+            place_name = frappe.db.get_value(
+                "Lugar",
+                {"owner_doctype": party[0], "owner_name": party[1], "location_key": location_key},
+                "name",
+            )
     if not place_name:
         return
     place = frappe.get_doc("Lugar", place_name)
@@ -138,7 +171,8 @@ def enqueue_location(doc, method=None):
     """Synchronize ERPNext-owned locations without hiding STEL write errors."""
     if getattr(frappe.flags, "in_stel_sync", False) or getattr(doc.flags, "skip_stel_outbound", False):
         return
-    if not doc.get("owner_customer"):
+    party_type, party_name = owner_party(doc)
+    if not party_name:
         return
     # Location edits are interactive and must not appear successful when the
     # background worker later rejects the STEL request. Run the small outbound
@@ -149,7 +183,8 @@ def enqueue_location(doc, method=None):
 def push_location(place_name):
     """Ensure the owner copy exists and update every existing STEL copy."""
     place = frappe.get_doc("Lugar", place_name)
-    owner_link = ensure_stel_location_link(place.name, place.owner_customer)
+    party_type, party_name = owner_party(place)
+    owner_link = ensure_stel_location_link(place.name, party_name, party_type)
     updated = []
     client = StelClient()
     place.reload()
@@ -159,9 +194,10 @@ def push_location(place_name):
             continue
         try:
             if is_default_address_link(link, client):
-                stel_customer_id = link.stel_customer_id or frappe.db.get_value("Customer", link.customer, "custom_stel_id")
+                link_type, link_name = link_party(link)
+                stel_customer_id = link.stel_customer_id or account_stel_id(link_type, link_name)
                 if stel_customer_id:
-                    update_customer_main_address(client, stel_customer_id, place_main_address_payload(place))
+                    update_account_main_address(client, link_type, stel_customer_id, place_main_address_payload(place))
                     mirror_place_to_primary_address(place, link.stel_address_id)
                     frappe.db.set_value("Lugar STEL Link", link.name, {
                         "stel_address_type": "DEFAULT",
@@ -189,15 +225,23 @@ def push_location(place_name):
 
 
 def update_customer_main_address(client, stel_customer_id, payload):
+    return update_account_main_address(client, "Customer", stel_customer_id, payload)
+
+
+def update_account_main_address(client, party_type, stel_customer_id, payload):
     """Update a main address, retrying legacy 0/0 coordinates without losing the real API error."""
     try:
-        return client.update_customer(stel_customer_id, {"main-address": payload})
+        return update_account(client, party_type, stel_customer_id, {"main-address": payload})
     except Exception as error:
         response = getattr(error, "response", None)
         if getattr(response, "status_code", None) != 400 or not ({"latitude", "longitude"} & payload.keys()):
             raise
         compatible_payload = {key: value for key, value in payload.items() if key not in {"latitude", "longitude"}}
-        return client.update_customer(stel_customer_id, {"main-address": compatible_payload})
+        return update_account(client, party_type, stel_customer_id, {"main-address": compatible_payload})
+
+
+def update_account(client, party_type, stel_id, payload):
+    return client.update_customer(stel_id, payload) if party_type == "Customer" else client.update_potential_client(stel_id, payload)
 
 
 def is_default_address_link(link, client=None):
@@ -224,22 +268,23 @@ def is_default_address_link(link, client=None):
     return False
 
 
-def ensure_stel_location_link(place_name, customer):
+def ensure_stel_location_link(place_name, party_name, party_type="Customer"):
     """Return the STEL address representing one ERPNext Lugar for one customer.
 
     STEL owns addresses under accounts, while ERPNext owns one physical Lugar.
     This function materializes the required per-customer STEL copy lazily.
     """
-    if not place_name or not customer:
+    if not place_name or not party_name:
         return None
     place = frappe.get_doc("Lugar", place_name)
-    link = next((row for row in place.stel_links if row.customer == customer), None)
+    link = next((row for row in place.stel_links if link_party(row) == (party_type, party_name)), None)
     if link and link.stel_address_id:
         return link
 
-    stel_customer_id = frappe.db.get_value("Customer", customer, "custom_stel_id")
+    stel_customer_id = account_stel_id(party_type, party_name)
     if not stel_customer_id:
-        frappe.throw(_("Customer {0} must be synchronized with STEL before using location {1}.").format(customer, place.location_name))
+        from electrix_sync.api.account_sync import ensure_account_synced
+        stel_customer_id = ensure_account_synced(party_type, party_name)
 
     client = StelClient()
     external_id = location_external_id(place.name, stel_customer_id)
@@ -256,11 +301,13 @@ def ensure_stel_location_link(place_name, customer):
 
     if not link:
         link = place.append("stel_links", {})
-    link.customer = customer
+    link.party_type = party_type
+    link.party_name = party_name
+    link.customer = party_name if party_type == "Customer" else None
     link.stel_customer_id = str(stel_customer_id)
     link.stel_address_id = str(address_id)
     link.stel_address_type = str(remote.get("address-type") or "OTHER").upper() if isinstance(remote, dict) else "OTHER"
-    link.is_owner_link = 1 if customer == place.owner_customer else 0
+    link.is_owner_link = 1 if (party_type, party_name) == owner_party(place) else 0
     link.payload_hash = location_payload_hash(location_payload(place))
     link.sync_enabled = 1
     link.sync_status = "Synced"
@@ -270,7 +317,25 @@ def ensure_stel_location_link(place_name, customer):
     # The STEL side effect already exists. Persist its ID before a later
     # document synchronization can fail, so retries never create duplicates.
     frappe.db.commit()
-    return next(row for row in place.stel_links if row.customer == customer)
+    return next(row for row in place.stel_links if link_party(row) == (party_type, party_name))
+
+
+def owner_party(place):
+    if place.get("owner_name"):
+        return place.get("owner_doctype") or "Customer", place.owner_name
+    return ("Customer", place.get("owner_customer"))
+
+
+def link_party(link):
+    if link.get("party_name"):
+        return link.get("party_type") or "Customer", link.party_name
+    return ("Customer", link.get("customer"))
+
+
+def account_stel_id(party_type, party_name):
+    if party_type not in {"Customer", "Lead"} or not party_name:
+        return None
+    return frappe.db.get_value(party_type, party_name, "custom_stel_id")
 
 
 def location_payload(place):

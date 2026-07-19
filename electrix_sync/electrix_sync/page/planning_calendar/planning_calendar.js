@@ -402,6 +402,8 @@ class ElectrixPlanningCalendar {
 		return [
 			{ fieldtype: "Data", fieldname: "subject", label: __("Asunto"), reqd: 1, default: source.subject || "" },
 			{ fieldtype: "Small Text", fieldname: "description", label: __("Descripción"), default: source.description || "" },
+			{ fieldtype: "Select", fieldname: "account_type", label: __("Tipo de cuenta"), options: "\nCustomer\nLead", default: source.custom_account_type || source.reference_doctype || "" },
+			{ fieldtype: "Dynamic Link", fieldname: "account", label: __("Cliente / potencial"), options: "account_type", default: source.custom_account || source.reference_docname || "" },
 			{ fieldtype: "Link", fieldname: "location", label: __("Lugar"), options: "Lugar", default: source.custom_service_location || "", get_query: () => ({ filters: { status: "Activo" } }) },
 			{ fieldtype: "Section Break" },
 			{ fieldtype: "Date", fieldname: "start_date", label: __("Fecha de inicio"), reqd: 1, default: start.date },

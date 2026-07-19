@@ -22,6 +22,7 @@ def ensure_staging_doctypes():
     ensure_master_data_fields()
     migrate_location_owners()
     migrate_location_address_types()
+    migrate_location_parties()
     migrate_project_location_field()
     add_projects_workspace_shortcuts()
     add_projects_sidebar_items()
@@ -65,6 +66,28 @@ def migrate_location_address_types():
             frappe.db.set_value("Lugar STEL Link", link.name, "stel_address_type", "DEFAULT", update_modified=False)
 
 
+def migrate_location_parties():
+    """Upgrade Customer-only Lugar ownership without losing existing links."""
+    if frappe.db.exists("DocType", "Lugar") and frappe.db.has_column("Lugar", "owner_name"):
+        places = frappe.get_all(
+            "Lugar", filters={"owner_name": ["is", "not set"], "owner_customer": ["is", "set"]},
+            fields=["name", "owner_customer"], limit_page_length=0,
+        )
+        for place in places:
+            frappe.db.set_value("Lugar", place.name, {
+                "owner_doctype": "Customer", "owner_name": place.owner_customer,
+            }, update_modified=False)
+    if frappe.db.exists("DocType", "Lugar STEL Link") and frappe.db.has_column("Lugar STEL Link", "party_name"):
+        links = frappe.get_all(
+            "Lugar STEL Link", filters={"party_name": ["is", "not set"], "customer": ["is", "set"]},
+            fields=["name", "customer"], limit_page_length=0,
+        )
+        for link in links:
+            frappe.db.set_value("Lugar STEL Link", link.name, {
+                "party_type": "Customer", "party_name": link.customer,
+            }, update_modified=False)
+
+
 def ensure_master_data_fields():
     common = [
         {"fieldname": "custom_stel_id", "label": "STEL ID", "fieldtype": "Data", "unique": 1, "read_only": 1, "no_copy": 1},
@@ -82,6 +105,13 @@ def ensure_master_data_fields():
             {"fieldname": "custom_stel_phone_2", "label": "STEL Phone 2", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_legal_name"},
             {"fieldname": "custom_stel_external_id", "label": "STEL External ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_stel_phone_2"},
             {**common[1], "insert_after": "custom_stel_external_id"},
+            {**common[2], "insert_after": "custom_stel_modified_at"},
+            {**common[3], "insert_after": "custom_stel_payload_hash"},
+            {**common[4], "insert_after": "custom_stel_last_sync"},
+        ],
+        "Lead": [
+            {**common[0], "insert_after": "lead_name"},
+            {**common[1], "insert_after": "custom_stel_id"},
             {**common[2], "insert_after": "custom_stel_modified_at"},
             {**common[3], "insert_after": "custom_stel_payload_hash"},
             {**common[4], "insert_after": "custom_stel_last_sync"},
@@ -140,7 +170,9 @@ def ensure_master_data_fields():
         ],
         "Event": [
             {**common[0], "insert_after": "subject"},
-            {"fieldname": "custom_service_location", "label": "Lugar", "fieldtype": "Link", "options": "Lugar", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_account_type", "label": "Tipo de cuenta", "fieldtype": "Select", "options": "Customer\nLead", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_account", "label": "Cliente / potencial", "fieldtype": "Dynamic Link", "options": "custom_account_type", "insert_after": "custom_account_type"},
+            {"fieldname": "custom_service_location", "label": "Lugar", "fieldtype": "Link", "options": "Lugar", "insert_after": "custom_account"},
             {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_service_location"},
             {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_assigned_employee"},
             {"fieldname": "custom_planning_status", "label": "Estado de planificación", "fieldtype": "Select", "options": "Unplanned\nPlanned\nCompleted", "default": "Unplanned", "insert_after": "custom_stel_calendar_id"},

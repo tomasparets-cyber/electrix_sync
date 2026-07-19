@@ -18,6 +18,12 @@ doctype_js = {
 }
 
 doc_events = {
+	"Customer": {
+		"on_update": "electrix_sync.api.account_sync.enqueue_account",
+	},
+	"Lead": {
+		"on_update": "electrix_sync.api.account_sync.enqueue_account",
+	},
     "Address": {
         "on_update": "electrix_sync.api.location_sync.enqueue_primary_address",
     },
@@ -46,7 +52,10 @@ scheduler_events = {
     "hourly": [
         "electrix_sync.api.sidebar.maintain_projects_customizations",
         "electrix_sync.api.sync.sync_employees",
+        "electrix_sync.api.sync.sync_customers",
+        "electrix_sync.api.sync.sync_leads",
         "electrix_sync.api.outbound_sync.retry_failed_events",
+        "electrix_sync.api.account_sync.retry_failed_accounts",
     ],
     "cron": {
         "*/5 * * * *": ["electrix_sync.api.realtime_sync.sync_event_calendars"],

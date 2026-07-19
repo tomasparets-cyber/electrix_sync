@@ -26,6 +26,15 @@ class StelClient:
     def update_customer(self, customer_id, payload):
         return self._write("PUT", f"/app/clients/{customer_id}", payload)
 
+    def create_customer(self, payload):
+        return self._write("POST", "/app/clients", payload)
+
+    def create_potential_client(self, payload):
+        return self._write("POST", "/app/potentialClients", payload)
+
+    def update_potential_client(self, lead_id, payload):
+        return self._write("PUT", f"/app/potentialClients/{lead_id}", payload)
+
     def get_addresses(self):
         endpoint = getattr(self.settings, "addresses_endpoint", None) or "/app/addresses"
         return self.get_collection(endpoint)
