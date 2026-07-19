@@ -140,7 +140,8 @@ def ensure_master_data_fields():
         ],
         "Event": [
             {**common[0], "insert_after": "subject"},
-            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_service_location", "label": "Lugar", "fieldtype": "Link", "options": "Lugar", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_service_location"},
             {"fieldname": "custom_stel_calendar_id", "label": "STEL Calendar ID", "fieldtype": "Data", "read_only": 1, "insert_after": "custom_assigned_employee"},
             {"fieldname": "custom_planning_status", "label": "Estado de planificación", "fieldtype": "Select", "options": "Unplanned\nPlanned\nCompleted", "default": "Unplanned", "insert_after": "custom_stel_calendar_id"},
             {"fieldname": "custom_estimated_duration", "label": "Duración estimada (horas)", "fieldtype": "Float", "default": "1", "insert_after": "custom_planning_status"},

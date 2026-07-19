@@ -49,7 +49,7 @@ def get_board(start_date=None, days=7):
     ]
     if frappe.get_meta("Event").has_field("event_category"):
         fields.append("event_category")
-    for fieldname in ("location", "reference_doctype", "reference_docname"):
+    for fieldname in ("location", "custom_service_location", "reference_doctype", "reference_docname"):
         if frappe.get_meta("Event").has_field(fieldname):
             fields.append(fieldname)
     planned = frappe.get_all(
@@ -244,8 +244,7 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
     event.status = normalize_event_status(status)
     if event.meta.has_field("event_category"):
         event.event_category = event_category or None
-    if event.meta.has_field("location"):
-        event.location = location or None
+    set_event_location(event, location)
     event.custom_assigned_employee = employee
     event.custom_stel_calendar_id = str(employee_doc.custom_stel_calendar_id)
     event.custom_planning_status = "Planned"
@@ -275,8 +274,7 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
     event.status = normalize_event_status(status)
     if event.meta.has_field("event_category"):
         event.event_category = event_category or None
-    if event.meta.has_field("location"):
-        event.location = location or None
+    set_event_location(event, location)
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     employee = employee or event.get("custom_assigned_employee")
     if employee:
@@ -398,7 +396,7 @@ def duplicate_event(event_name, starts_on=None, employee=None):
     return create_planned_event(
         employee=employee, subject=source.subject, starts_on=start, ends_on=start + duration,
         description=source.description, event_category=source.get("event_category"), status=source.status,
-        location=source.get("location"),
+        location=source.get("custom_service_location") or None,
     )
 
 
@@ -538,3 +536,16 @@ def add_standard_event_relations(event, payload):
         account_id = frappe.db.get_value("Customer", event.reference_docname, "custom_stel_id")
         if account_id:
             payload["account-id"] = int(account_id)
+
+
+def set_event_location(event, place_name):
+    """Keep a real Lugar relation while preserving Event.location for STEL/display."""
+    if event.meta.has_field("custom_service_location"):
+        event.custom_service_location = place_name or None
+    if not event.meta.has_field("location"):
+        return
+    if place_name and frappe.db.exists("Lugar", place_name):
+        place = frappe.get_doc("Lugar", place_name)
+        event.location = place.location_name or place.name
+    else:
+        event.location = None

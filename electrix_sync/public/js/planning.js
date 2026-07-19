@@ -343,7 +343,7 @@ class ElectrixPlanning {
 		return [
 			{ fieldtype: "Data", fieldname: "subject", label: __("Asunto"), reqd: 1, default: source.subject || "" },
 			{ fieldtype: "Small Text", fieldname: "description", label: __("Descripción"), default: source.description || "" },
-			{ fieldtype: "Data", fieldname: "location", label: __("Ubicación"), default: source.location || "" },
+			{ fieldtype: "Link", fieldname: "location", label: __("Lugar"), options: "Lugar", default: source.custom_service_location || "", get_query: () => ({ filters: { status: "Activo" } }) },
 			{ fieldtype: "Section Break" },
 			{ fieldtype: "Date", fieldname: "start_date", label: __("Fecha de inicio"), reqd: 1, default: start.date },
 			{ fieldtype: "Select", fieldname: "start_time", label: __("Hora de inicio"), reqd: 1, options: times, default: start.time },

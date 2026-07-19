@@ -106,9 +106,27 @@ class ElectrixPlanningCalendar {
 		const headers = this.data.days.map((day) => `<div class="pc-day-header"><strong>${this.weekday(day)}</strong><span>${frappe.datetime.str_to_user(day)}</span></div>`).join("");
 		const dayColumns = this.data.days.map((day) => `<div class="pc-day" data-day="${day}">${this.eventsForDay(day)}</div>`).join("");
 		const hours = Array.from({ length: 24 }, (_, hour) => `<div class="pc-hour">${String(hour).padStart(2, "0")}:00</div>`).join("");
-		this.page.main.html(`<section class="pc-calendar"><div class="pc-header"><div></div>${headers}</div><div class="pc-body"><div class="pc-hours">${hours}</div>${dayColumns}</div></section>`);
+		const unplanned = this.data.unplanned.map((event) => this.backlogCard(event)).join("");
+		this.page.main.html(`<div class="pc-planning-shell">
+			<section class="pc-calendar"><div class="pc-header"><div></div>${headers}</div><div class="pc-body"><div class="pc-hours">${hours}</div>${dayColumns}</div></section>
+			<aside class="planning-backlog">
+				<div class="planning-backlog-title"><strong>${__("Sin planificar")}</strong><span>${this.data.unplanned.length}</span></div>
+				<input class="form-control planning-search" placeholder="${__("Buscar")}">
+				<div class="planning-backlog-list">${unplanned || `<div class="planning-empty">${__("No hay eventos pendientes")}</div>`}</div>
+			</aside>
+		</div>`);
 		this.bind();
 		this.applyFilters();
+	}
+
+	backlogCard(event) {
+		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
+		return `<article class="planning-event is-backlog pc-backlog-event" draggable="true" data-event="${event.name}" data-search="${frappe.utils.escape_html((event.subject || "").toLowerCase())}">
+			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
+			<strong>${frappe.utils.escape_html(event.subject || event.name)}</strong>
+			<span>${frappe.utils.escape_html([event.event_category, event.status || "Open"].filter(Boolean).join(" · "))}</span>
+			<small>${duration}h</small>
+		</article>`;
 	}
 
 	eventsForDay(day) {
@@ -142,6 +160,27 @@ class ElectrixPlanningCalendar {
 		});
 		this.page.main.find(".pc-resize").on("pointerdown", (event) => this.startResize(event));
 		this.page.main.find(".pc-actions-toggle").on("click", (event) => this.showActionsMenu(event));
+		this.page.main.find(".pc-day").on("click", (event) => {
+			if (event.target !== event.currentTarget) return;
+			const rect = event.currentTarget.getBoundingClientRect();
+			this.createAt(event.currentTarget.dataset.day, this.snapMinutes((event.originalEvent.clientY - rect.top) / 0.8));
+		}).on("dragover", (event) => {
+			event.preventDefault();
+			event.currentTarget.classList.add("is-over");
+		}).on("dragleave", (event) => event.currentTarget.classList.remove("is-over"))
+			.on("drop", (event) => this.dropUnplanned(event));
+		this.page.main.find(".pc-backlog-event").on("dragstart", (event) => {
+			event.originalEvent.dataTransfer.setData("text/plain", event.currentTarget.dataset.event);
+		}).on("click", (event) => {
+			if ($(event.target).closest(".pc-actions-toggle").length) return;
+			this.editEvent(event.currentTarget.dataset.event);
+		});
+		this.page.main.find(".planning-search").on("input", (event) => {
+			const value = event.currentTarget.value.toLowerCase();
+			this.page.main.find(".pc-backlog-event").each((_, card) => {
+				card.style.display = card.dataset.search.includes(value) ? "" : "none";
+			});
+		});
 	}
 
 	startMove(event) {
@@ -154,7 +193,8 @@ class ElectrixPlanningCalendar {
 		card.classList.add("is-moving");
 		const move = (pointerEvent) => {
 			if (Math.abs(pointerEvent.clientX - originX) + Math.abs(pointerEvent.clientY - originY) > 4) this.didManipulate = true;
-			card.style.transform = `translate(${pointerEvent.clientX - originX}px, ${pointerEvent.clientY - originY}px)`;
+			const snappedDelta = this.snapDuration((pointerEvent.clientY - originY) / 0.8);
+			card.style.transform = `translate(${pointerEvent.clientX - originX}px, ${snappedDelta * 0.8}px)`;
 		};
 		const up = async (pointerEvent) => {
 			document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up);
@@ -192,7 +232,7 @@ class ElectrixPlanningCalendar {
 	showActionsMenu(event) {
 		event.preventDefault(); event.stopPropagation();
 		const button = event.currentTarget;
-		const eventName = button.closest(".pc-event").dataset.event;
+		const eventName = button.closest("[data-event]").dataset.event;
 		if (this.actionsButton === button) {
 			this.closeActionsMenu();
 			return;
@@ -239,7 +279,7 @@ class ElectrixPlanningCalendar {
 	}
 
 	editEvent(eventName) {
-		const source = this.data.events.find((row) => row.name === eventName);
+		const source = [...this.data.events, ...this.data.unplanned].find((row) => row.name === eventName);
 		if (!source) return;
 		const dialog = new frappe.ui.Dialog({
 			title: __("Editar evento"),
@@ -271,6 +311,64 @@ class ElectrixPlanningCalendar {
 		dialog.show();
 	}
 
+	createAt(day, minutes) {
+		const startsOn = this.dateTime(day, minutes);
+		const endsOn = this.addMinutes(startsOn, 60);
+		const dialog = new frappe.ui.Dialog({
+			title: __("Nuevo evento"),
+			fields: this.eventFields({ starts_on: startsOn, ends_on: endsOn, status: "Open" }),
+			primary_action_label: __("Crear y planificar"),
+			primary_action: async (values) => {
+				const payload = this.eventPayload(values);
+				const employee = payload.employee;
+				delete payload.employee;
+				await frappe.call({
+					method: "electrix_sync.api.planning.create_planned_event",
+					args: { employee, ...payload },
+					freeze: true,
+					freeze_message: __("Creando evento en ERPNext y STEL…"),
+				});
+				dialog.hide();
+				await this.load();
+			},
+		});
+		dialog.show();
+	}
+
+	async dropUnplanned(event) {
+		event.preventDefault();
+		const dayColumn = event.currentTarget;
+		dayColumn.classList.remove("is-over");
+		const eventName = event.originalEvent.dataTransfer.getData("text/plain");
+		const source = this.data.unplanned.find((row) => row.name === eventName);
+		if (!source) return;
+		const rect = dayColumn.getBoundingClientRect();
+		const minutes = this.snapMinutes((event.originalEvent.clientY - rect.top) / 0.8);
+		const employee = await this.selectCalendar();
+		if (!employee) return;
+		await frappe.call({
+			method: "electrix_sync.api.planning.plan_event",
+			args: { event_name: eventName, employee, starts_on: this.dateTime(dayColumn.dataset.day, minutes) },
+			freeze: true,
+			freeze_message: __("Planificando evento en ERPNext y STEL…"),
+		});
+		frappe.show_alert({ message: __("Evento planificado"), indicator: "green" });
+		await this.load();
+	}
+
+	selectCalendar() {
+		return new Promise((resolve) => {
+			const dialog = new frappe.ui.Dialog({
+				title: __("Asignar a calendario"),
+				fields: [{ fieldtype: "Link", fieldname: "employee", label: __("Empleado / calendario"), options: "Employee", reqd: 1, get_query: () => ({ filters: { status: "Active", custom_stel_calendar_id: ["is", "set"] } }) }],
+				primary_action_label: __("Asignar"),
+				primary_action: (values) => { dialog.hide(); resolve(values.employee); },
+			});
+			dialog.$wrapper.one("hidden.bs.modal", () => resolve(null));
+			dialog.show();
+		});
+	}
+
 	eventFields(source) {
 		const start = this.splitDateTime(source.starts_on);
 		const end = this.splitDateTime(source.ends_on);
@@ -278,7 +376,7 @@ class ElectrixPlanningCalendar {
 		return [
 			{ fieldtype: "Data", fieldname: "subject", label: __("Asunto"), reqd: 1, default: source.subject || "" },
 			{ fieldtype: "Small Text", fieldname: "description", label: __("Descripción"), default: source.description || "" },
-			{ fieldtype: "Data", fieldname: "location", label: __("Ubicación"), default: source.location || "" },
+			{ fieldtype: "Link", fieldname: "location", label: __("Lugar"), options: "Lugar", default: source.custom_service_location || "", get_query: () => ({ filters: { status: "Activo" } }) },
 			{ fieldtype: "Section Break" },
 			{ fieldtype: "Date", fieldname: "start_date", label: __("Fecha de inicio"), reqd: 1, default: start.date },
 			{ fieldtype: "Select", fieldname: "start_time", label: __("Hora de inicio"), reqd: 1, options: times, default: start.time },
