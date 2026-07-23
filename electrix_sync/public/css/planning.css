@@ -15,6 +15,9 @@
 .planning-cell { padding: 7px; border-right: 1px solid var(--border-color); min-width: 0; transition: background .15s; cursor: cell; }
 .planning-cell.is-over { background: var(--blue-50); outline: 2px dashed var(--blue-400); outline-offset: -3px; }
 .planning-event { position: relative; margin-bottom: 6px; padding: 8px 30px 8px 9px; border-radius: 8px; background: var(--blue-100); border-left: 3px solid var(--blue-500); cursor: grab; display: flex; flex-direction: column; gap: 2px; }
+.planning-event.is-status-open { background: var(--blue-100); border-left-color: var(--blue-500); }
+.planning-event.is-status-completed { background: var(--green-100); border-left-color: var(--green-500); }
+.planning-event.is-status-cancelled { background: var(--red-100); border-left-color: var(--red-500); }
 .planning-event strong { font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
 .planning-event span, .planning-event small { color: var(--text-muted); font-size: 11px; }
 .planning-backlog { display: flex; flex-direction: column; background: var(--subtle-fg); padding: 14px; }

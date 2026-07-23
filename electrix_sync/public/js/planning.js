@@ -214,12 +214,23 @@ class ElectrixPlanning {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
 		const syncWarning = ["Error", "Conflict", "Pending"].includes(event.custom_stel_sync_status) ? `STEL: ${event.custom_stel_sync_status}` : null;
 		const metadata = [event.event_category, event.status || "Open", syncWarning].filter(Boolean).join(" · ");
-		return `<article class="planning-event ${backlog ? "is-backlog" : ""} ${syncWarning ? "has-sync-warning" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
+		return `<article class="planning-event ${this.eventStatusClass(event)} ${backlog ? "is-backlog" : ""} ${syncWarning ? "has-sync-warning" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
 			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
 			<strong>${this.escape(event.subject || event.name)}</strong>
 			<span>${this.escape(metadata)}${backlog ? "" : ` · ${this.timeLabel(event.starts_on, event.ends_on)}`}</span>
 			<small>${duration}h</small>
 		</article>`;
+	}
+
+	eventStatusClass(event) {
+		const status = String(event.status || "Open").trim().toLowerCase();
+		if (["closed", "completed"].includes(status) || event.custom_planning_status === "Completed") {
+			return "is-status-completed";
+		}
+		if (status === "cancelled" || status === "canceled") {
+			return "is-status-cancelled";
+		}
+		return "is-status-open";
 	}
 
 	bind() {

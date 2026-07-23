@@ -134,7 +134,7 @@ class ElectrixPlanningCalendar {
 
 	backlogCard(event) {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
-		return `<article class="planning-event is-backlog pc-backlog-event" draggable="true" data-event="${event.name}" data-search="${frappe.utils.escape_html((event.subject || "").toLowerCase())}">
+		return `<article class="planning-event ${this.eventStatusClass(event)} is-backlog pc-backlog-event" draggable="true" data-event="${event.name}" data-search="${frappe.utils.escape_html((event.subject || "").toLowerCase())}">
 			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
 			<strong>${frappe.utils.escape_html(event.subject || event.name)}</strong>
 			<span>${frappe.utils.escape_html([event.event_category, event.status || "Open"].filter(Boolean).join(" · "))}</span>
@@ -154,12 +154,23 @@ class ElectrixPlanningCalendar {
 				const top = start * 0.8;
 				const height = Math.max((end - start) * 0.8, 20);
 				const width = 94 / Math.max(employees.length, 1);
-				cards.push(`<div class="pc-event ${syncWarning ? "has-sync-warning" : ""}" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
+				cards.push(`<div class="pc-event ${this.eventStatusClass(event)} ${syncWarning ? "has-sync-warning" : ""}" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
 					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}${syncWarning ? ` · STEL: ${syncWarning}` : ""}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
 				</div>`);
 			});
 		}
 		return cards.join("");
+	}
+
+	eventStatusClass(event) {
+		const status = String(event.status || "Open").trim().toLowerCase();
+		if (["closed", "completed"].includes(status) || event.custom_planning_status === "Completed") {
+			return "is-status-completed";
+		}
+		if (status === "cancelled" || status === "canceled") {
+			return "is-status-cancelled";
+		}
+		return "is-status-open";
 	}
 
 	bind() {
