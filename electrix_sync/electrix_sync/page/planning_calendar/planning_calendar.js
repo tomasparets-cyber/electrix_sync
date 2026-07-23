@@ -292,8 +292,14 @@ class ElectrixPlanningCalendar {
 		this.actionsEventName = eventName;
 		this.actionsButton = button;
 		button.setAttribute("aria-expanded", "true");
+		const source = [...this.data.events, ...this.data.unplanned].find((row) => row.name === eventName);
+		const isClosed = String(source?.status || "").toLowerCase() === "closed";
+		const completionAction = source && source.status !== "Cancelled"
+			? `<button type="button" data-action="completion" role="menuitem">${frappe.utils.icon(isClosed ? "refresh" : "check", "sm")}<span>${isClosed ? __("Reabrir") : __("Completar")}</span></button>`
+			: "";
 		const rect = button.getBoundingClientRect();
 		this.actionsMenu = $(`<div class="pc-event-actions-menu" role="menu">
+			${completionAction}
 			<button type="button" data-action="duplicate" role="menuitem">${frappe.utils.icon("copy", "sm")}<span>${__("Duplicar")}</span></button>
 			<button type="button" data-action="unplan" role="menuitem">${frappe.utils.icon("calendar", "sm")}<span>${__("Desprogramar")}</span></button>
 			<button type="button" data-action="delete" role="menuitem">${frappe.utils.icon("delete", "sm")}<span>${__("Eliminar")}</span></button>
@@ -305,6 +311,10 @@ class ElectrixPlanningCalendar {
 			top: `${Math.max(8, Math.min(window.innerHeight - height - 8, rect.bottom + 4))}px`,
 		});
 		this.actionsMenu.on("click", (menuEvent) => menuEvent.stopPropagation());
+		this.actionsMenu.find('[data-action="completion"]').on("click", async () => {
+			this.closeActionsMenu();
+			await this.setEventCompleted(eventName, !isClosed);
+		});
 		this.actionsMenu.find('[data-action="duplicate"]').on("click", async () => {
 			this.closeActionsMenu();
 			await this.duplicateEvent(eventName);
@@ -473,6 +483,23 @@ class ElectrixPlanningCalendar {
 		await frappe.call({ method: "electrix_sync.api.planning.unplan_event", args: { event_name: eventName }, freeze: true, freeze_message: __("Desprogramando evento…") });
 		dialog?.hide();
 		frappe.show_alert({ message: __("Evento desprogramado"), indicator: "green" });
+		await this.load();
+	}
+
+	async setEventCompleted(eventName, completed) {
+		const response = await frappe.call({
+			method: "electrix_sync.api.planning.set_event_completed",
+			args: { event_name: eventName, completed },
+			freeze: true,
+			freeze_message: completed ? __("Completando evento…") : __("Reabriendo evento…"),
+		});
+		const synced = response.message?.synced !== false;
+		frappe.show_alert({
+			message: synced
+				? (completed ? __("Evento completado") : __("Evento reabierto"))
+				: __("Estado guardado en ERPNext; pendiente de sincronizar con STEL"),
+			indicator: synced ? "green" : "orange",
+		});
 		await this.load();
 	}
 

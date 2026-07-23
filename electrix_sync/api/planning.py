@@ -333,6 +333,55 @@ def unplan_event(event_name):
 
 
 @frappe.whitelist()
+def set_event_completed(event_name, completed=True):
+    """Complete or reopen an event without changing its schedule or linked task."""
+    check_planning_access()
+    event = frappe.get_doc("Event", event_name)
+    completed = str(completed).lower() in {"1", "true", "yes"}
+    event.status = "Closed" if completed else "Open"
+    event.custom_planning_status = "Completed" if completed else (
+        "Planned"
+        if event.get("starts_on") and event.get("custom_assigned_employee")
+        else "Unplanned"
+    )
+    event.flags.skip_stel_outbound = True
+    event.save(ignore_permissions=True)
+
+    if not event.get("custom_stel_id"):
+        frappe.db.set_value(
+            "Event",
+            event.name,
+            {
+                "custom_stel_sync_status": "Skipped",
+                "custom_stel_last_error": None,
+            },
+            update_modified=False,
+        )
+        return {"name": event.name, "status": event.status, "synced": True}
+
+    frappe.db.set_value(
+        "Event", event.name, "custom_stel_sync_status", "Pending", update_modified=False
+    )
+    try:
+        update_stel_event_copy(event, event.custom_stel_id, event.starts_on, event.ends_on)
+        mark_event_sync_state(event)
+        return {"name": event.name, "status": event.status, "synced": True}
+    except Exception:
+        error = frappe.get_traceback()
+        frappe.log_error(error, _("Could not update event status in STEL"))
+        frappe.db.set_value(
+            "Event",
+            event.name,
+            {
+                "custom_stel_sync_status": "Error",
+                "custom_stel_last_error": str(error)[-2000:],
+            },
+            update_modified=False,
+        )
+        return {"name": event.name, "status": event.status, "synced": False}
+
+
+@frappe.whitelist()
 def delete_planned_event(event_name):
     check_planning_access()
     event = frappe.get_doc("Event", event_name)
