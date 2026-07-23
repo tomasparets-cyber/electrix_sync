@@ -1,5 +1,6 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
 
 def ensure_staging_doctypes():
@@ -20,6 +21,7 @@ def ensure_staging_doctypes():
     frappe.clear_cache(doctype="STEL Bulk Sync Run")
     frappe.clear_cache(doctype="STEL Raw Record")
     ensure_master_data_fields()
+    allow_unscheduled_events()
     migrate_location_owners()
     migrate_location_address_types()
     migrate_location_parties()
@@ -170,7 +172,8 @@ def ensure_master_data_fields():
         ],
         "Event": [
             {**common[0], "insert_after": "subject"},
-            {"fieldname": "custom_account_type", "label": "Tipo de cuenta", "fieldtype": "Select", "options": "Customer\nLead", "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_is_unscheduled", "label": "Sin fecha", "fieldtype": "Check", "default": "0", "hidden": 1, "no_copy": 1, "insert_after": "custom_stel_id"},
+            {"fieldname": "custom_account_type", "label": "Tipo de cuenta", "fieldtype": "Select", "options": "Customer\nLead", "insert_after": "custom_is_unscheduled"},
             {"fieldname": "custom_account", "label": "Cliente / potencial", "fieldtype": "Dynamic Link", "options": "custom_account_type", "insert_after": "custom_account_type"},
             {"fieldname": "custom_service_location", "label": "Lugar", "fieldtype": "Link", "options": "Lugar", "insert_after": "custom_account"},
             {"fieldname": "custom_assigned_employee", "label": "Empleado planificado", "fieldtype": "Link", "options": "Employee", "insert_after": "custom_service_location"},
@@ -192,6 +195,13 @@ def ensure_master_data_fields():
     for doctype in available:
         frappe.clear_cache(doctype=doctype)
         frappe.db.updatedb(doctype)
+
+
+def allow_unscheduled_events():
+    """The hidden flag lets our validate hook undo Frappe's automatic current date."""
+    if not frappe.db.exists("DocType", "Event"):
+        return
+    make_property_setter("Event", "starts_on", "reqd", 0, "Check", validate_fields_for_doctype=False)
 
 
 def migrate_event_assignments_to_individual_events():

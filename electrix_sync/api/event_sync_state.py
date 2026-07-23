@@ -20,6 +20,7 @@ def event_hash_from_doc(doc):
 
 
 def event_hash_from_stel(item):
+    item = single_item(item)
     return snapshot_hash({
         "subject": first(item, "subject", "description"),
         "description": first(item, "description"),
@@ -33,6 +34,7 @@ def event_hash_from_stel(item):
 
 
 def stel_modified_at(item):
+    item = single_item(item)
     value = first(item, "utc-last-modification-date", "utcLastModificationDate", "modified", "updatedAt")
     if not value:
         return None
@@ -87,7 +89,14 @@ def strip_html(value):
 
 
 def first(item, *keys):
+    item = single_item(item)
     for key in keys:
         if item.get(key) is not None:
             return item.get(key)
     return None
+
+
+def single_item(item):
+    if isinstance(item, list):
+        return item[0] if item and isinstance(item[0], dict) else {}
+    return item if isinstance(item, dict) else {}

@@ -1,7 +1,14 @@
 frappe.ui.form.on("Event", {
 	refresh(frm) {
+		frm.set_df_property("starts_on", "reqd", 0);
 		render_event_datetime_selectors(frm);
 		add_stel_sync_actions(frm);
+	},
+	validate(frm) {
+		frm.doc.custom_is_unscheduled = frm.doc.starts_on ? 0 : 1;
+		if (frm.doc.custom_planning_status === "Planned" && !frm.doc.starts_on) {
+			frappe.throw(__("Un evento planificado necesita fecha y hora de inicio."));
+		}
 	},
 	async after_save(frm) {
 		if (frm.__electrix_syncing_event || (!frm.doc.custom_stel_id && !frm.doc.custom_stel_calendar_id)) return;
@@ -22,6 +29,7 @@ frappe.ui.form.on("Event", {
 		}
 	},
 	starts_on(frm) {
+		frm.doc.custom_is_unscheduled = frm.doc.starts_on ? 0 : 1;
 		setTimeout(() => render_event_datetime_selector(frm, "starts_on", __("Fecha de inicio"), __("Hora de inicio")), 0);
 	},
 	ends_on(frm) {
@@ -81,7 +89,16 @@ function render_event_datetime_selector(frm, fieldname, dateLabel, timeLabel) {
 	editor.find("input,select").on("change", async () => {
 		const selectedDate = editor.find(".electrix-event-date").val();
 		const selectedTime = editor.find(".electrix-event-time").val();
-		if (!selectedDate || !selectedTime) return;
+		if (!selectedDate) {
+			await frm.set_value(fieldname, null);
+			if (fieldname === "starts_on") {
+				frm.doc.custom_is_unscheduled = 1;
+				await frm.set_value("ends_on", null);
+				await frm.set_value("custom_planning_status", "Unplanned");
+			}
+			return;
+		}
+		if (!selectedTime) return;
 		await frm.set_value(fieldname, `${selectedDate} ${selectedTime}:00`);
 	});
 }

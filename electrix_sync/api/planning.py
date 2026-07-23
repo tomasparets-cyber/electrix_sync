@@ -220,6 +220,8 @@ def plan_event(event_name, employee, starts_on, ends_on=None):
     event.custom_assigned_employee = employee
     event.custom_stel_calendar_id = str(calendar_id)
     event.custom_planning_status = "Planned"
+    if event.meta.has_field("custom_is_unscheduled"):
+        event.custom_is_unscheduled = 0
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
@@ -253,6 +255,8 @@ def create_planned_event(employee, subject, starts_on, ends_on, description=None
     event.custom_assigned_employee = employee
     event.custom_stel_calendar_id = str(employee_doc.custom_stel_calendar_id)
     event.custom_planning_status = "Planned"
+    if event.meta.has_field("custom_is_unscheduled"):
+        event.custom_is_unscheduled = 0
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
     event.flags.skip_stel_outbound = True
     event.insert(ignore_permissions=True)
@@ -284,6 +288,8 @@ def edit_planned_event(event_name, subject, starts_on, ends_on, description=None
     set_event_account(event, account_type, account)
     set_event_location(event, location)
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
+    if event.meta.has_field("custom_is_unscheduled"):
+        event.custom_is_unscheduled = 0
     employee = employee or event.get("custom_assigned_employee")
     if employee:
         employee_doc = frappe.get_doc("Employee", employee)
@@ -314,6 +320,8 @@ def unplan_event(event_name):
     event.custom_stel_calendar_id = None
     event.custom_assigned_employee = None
     event.custom_planning_status = "Unplanned"
+    if event.meta.has_field("custom_is_unscheduled"):
+        event.custom_is_unscheduled = 1
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     frappe.db.set_value(
@@ -346,6 +354,8 @@ def resize_event(event_name, starts_on, ends_on):
     event.starts_on = starts_on
     event.ends_on = ends_on
     event.custom_estimated_duration = (ends_on - starts_on).total_seconds() / 3600
+    if event.meta.has_field("custom_is_unscheduled"):
+        event.custom_is_unscheduled = 0
     event.flags.skip_stel_outbound = True
     event.save(ignore_permissions=True)
     mark_event_sync_state(event)

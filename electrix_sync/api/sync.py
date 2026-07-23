@@ -487,6 +487,8 @@ def sync_event(item, event_type_names=None, force=False):
             doc.custom_planning_status = "Completed" if stel_state == "COMPLETED" else (
                 "Planned" if employee else "Unplanned"
             )
+        if has_field(doc, "custom_is_unscheduled"):
+            doc.custom_is_unscheduled = 0
         if has_field(doc, "custom_estimated_duration"):
             start_dt = get_datetime(doc.starts_on)
             end_dt = get_datetime(doc.ends_on)

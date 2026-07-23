@@ -149,7 +149,21 @@ class StelClient:
         if response.status_code == 403:
             raise StelPermissionError(f"STEL API permission denied for {response.url}.")
         response.raise_for_status()
-        return response.json()
+        return self._extract_one(response.json())
+
+    def _extract_one(self, data):
+        """Normalize STEL's inconsistent single-resource response envelopes."""
+        if isinstance(data, list):
+            return data[0] if data and isinstance(data[0], dict) else {}
+        if not isinstance(data, dict):
+            return {}
+        for key in ("data", "item", "result", "event", "address", "client", "potentialClient"):
+            value = data.get(key)
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, list):
+                return value[0] if value and isinstance(value[0], dict) else {}
+        return data
 
     def _extract_items(self, data):
         if isinstance(data, list):

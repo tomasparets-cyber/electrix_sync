@@ -50,6 +50,13 @@ def delete_event(doc, method=None):
 
 def normalize_event(doc, method=None):
     doc.status = doc.status if doc.status in {"Open", "Closed", "Cancelled"} else "Open"
+    if doc.get("custom_is_unscheduled"):
+        doc.starts_on = None
+        doc.ends_on = None
+        doc.custom_assigned_employee = None
+        doc.custom_stel_calendar_id = None
+        doc.custom_planning_status = "Unplanned"
+        return
     doc.custom_planning_status = "Completed" if doc.status == "Closed" else (
         "Planned" if doc.get("custom_assigned_employee") and doc.starts_on else "Unplanned"
     )
@@ -133,7 +140,24 @@ def push_task(doc):
 
 
 def push_event(doc, force=False):
-    if not doc.starts_on:
+    if doc.get("custom_is_unscheduled") or not doc.starts_on:
+        if doc.get("custom_stel_id"):
+            delete_remote_event(doc.custom_stel_id)
+        frappe.db.set_value(
+            "Event",
+            doc.name,
+            {
+                "custom_stel_id": None,
+                "custom_stel_calendar_id": None,
+                "custom_assigned_employee": None,
+                "custom_planning_status": "Unplanned",
+                "custom_stel_sync_status": "Skipped",
+                "custom_stel_payload_hash": None,
+                "custom_stel_last_sync": frappe.utils.now(),
+            },
+            update_modified=False,
+        )
+        frappe.db.commit()
         return
     starts_on = get_datetime(doc.starts_on)
     ends_on = get_datetime(doc.ends_on or doc.starts_on)
