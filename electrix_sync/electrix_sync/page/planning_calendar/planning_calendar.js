@@ -134,7 +134,7 @@ class ElectrixPlanningCalendar {
 
 	backlogCard(event) {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
-		return `<article class="planning-event ${this.eventStatusClass(event)} is-backlog pc-backlog-event" draggable="true" data-event="${event.name}" data-search="${frappe.utils.escape_html((event.subject || "").toLowerCase())}">
+		return `<article class="planning-event ${this.eventStatusClass(event)} is-backlog pc-backlog-event" style="${this.eventStatusStyle(event)}" draggable="true" data-event="${event.name}" data-search="${frappe.utils.escape_html((event.subject || "").toLowerCase())}">
 			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
 			<strong>${frappe.utils.escape_html(event.subject || event.name)}</strong>
 			<span>${frappe.utils.escape_html([event.event_category, event.status || "Open"].filter(Boolean).join(" · "))}</span>
@@ -154,7 +154,7 @@ class ElectrixPlanningCalendar {
 				const top = start * 0.8;
 				const height = Math.max((end - start) * 0.8, 20);
 				const width = 94 / Math.max(employees.length, 1);
-				cards.push(`<div class="pc-event ${this.eventStatusClass(event)} ${syncWarning ? "has-sync-warning" : ""}" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%">
+				cards.push(`<div class="pc-event ${this.eventStatusClass(event)} ${syncWarning ? "has-sync-warning" : ""}" data-employee="${employee}" data-event="${event.name}" data-start="${event.starts_on}" data-end="${event.ends_on}" style="top:${top}px;height:${height}px;left:${2 + index * width}%;width:${width - 1}%;${this.eventStatusStyle(event, syncWarning)}">
 					<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button><strong>${frappe.utils.escape_html(event.subject || event.name)}</strong><span>${this.time(event.starts_on)}–${this.time(event.ends_on)}</span><small>${frappe.utils.escape_html(this.employeeById[employee].employee_name)}${syncWarning ? ` · STEL: ${syncWarning}` : ""}</small><i class="pc-resize" title="${__("Cambiar duración")}"></i>
 				</div>`);
 			});
@@ -171,6 +171,20 @@ class ElectrixPlanningCalendar {
 			return "is-status-cancelled";
 		}
 		return "is-status-open";
+	}
+
+	eventStatusStyle(event, syncWarning = null) {
+		if (syncWarning) {
+			return "background-color:var(--orange-50,#fff3e0);border-left-color:var(--orange-500,#e86c13)";
+		}
+		const statusClass = this.eventStatusClass(event);
+		if (statusClass === "is-status-completed") {
+			return "background-color:var(--green-100,#d9f2e3);border-left-color:var(--green-500,#28a745)";
+		}
+		if (statusClass === "is-status-cancelled") {
+			return "background-color:var(--red-100,#fce0e0);border-left-color:var(--red-500,#e24c4c)";
+		}
+		return "background-color:var(--blue-100,#e7f1ff);border-left-color:var(--blue-500,#2490ef)";
 	}
 
 	bind() {

@@ -214,7 +214,7 @@ class ElectrixPlanning {
 		const duration = Number(event.custom_estimated_duration || 1).toFixed(1).replace(".0", "");
 		const syncWarning = ["Error", "Conflict", "Pending"].includes(event.custom_stel_sync_status) ? `STEL: ${event.custom_stel_sync_status}` : null;
 		const metadata = [event.event_category, event.status || "Open", syncWarning].filter(Boolean).join(" · ");
-		return `<article class="planning-event ${this.eventStatusClass(event)} ${backlog ? "is-backlog" : ""} ${syncWarning ? "has-sync-warning" : ""}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
+		return `<article class="planning-event ${this.eventStatusClass(event)} ${backlog ? "is-backlog" : ""} ${syncWarning ? "has-sync-warning" : ""}" style="${this.eventStatusStyle(event, syncWarning)}" draggable="true" data-event="${event.name}" data-search="${this.escape((event.subject || "").toLowerCase())}">
 			<button type="button" class="pc-actions-toggle" title="${__("Acciones")}" aria-label="${__("Acciones del evento")}" aria-expanded="false"><span aria-hidden="true">▾</span></button>
 			<strong>${this.escape(event.subject || event.name)}</strong>
 			<span>${this.escape(metadata)}${backlog ? "" : ` · ${this.timeLabel(event.starts_on, event.ends_on)}`}</span>
@@ -231,6 +231,20 @@ class ElectrixPlanning {
 			return "is-status-cancelled";
 		}
 		return "is-status-open";
+	}
+
+	eventStatusStyle(event, syncWarning = null) {
+		if (syncWarning) {
+			return "background-color:var(--orange-50,#fff3e0);border-left-color:var(--orange-500,#e86c13)";
+		}
+		const statusClass = this.eventStatusClass(event);
+		if (statusClass === "is-status-completed") {
+			return "background-color:var(--green-100,#d9f2e3);border-left-color:var(--green-500,#28a745)";
+		}
+		if (statusClass === "is-status-cancelled") {
+			return "background-color:var(--red-100,#fce0e0);border-left-color:var(--red-500,#e24c4c)";
+		}
+		return "background-color:var(--blue-100,#e7f1ff);border-left-color:var(--blue-500,#2490ef)";
 	}
 
 	bind() {
