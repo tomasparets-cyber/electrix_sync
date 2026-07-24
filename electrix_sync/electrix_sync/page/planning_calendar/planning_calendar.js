@@ -77,6 +77,7 @@ class ElectrixPlanningCalendar {
 	shift(days) { this.startDate = frappe.datetime.add_days(this.startDate, days); this.load(); }
 
 	async load() {
+		const scrollPosition = this.captureScrollPosition();
 		this.closeActionsMenu();
 		this.page.main.html(`<div class="planning-loading">${__("Cargando calendario…")}</div>`);
 		const response = await frappe.call({ method: "electrix_sync.api.planning.get_board", args: { start_date: this.startDate, days: 7 } });
@@ -88,6 +89,29 @@ class ElectrixPlanningCalendar {
 		}
 		this.renderCalendarMenu();
 		this.render();
+		this.restoreScrollPosition(scrollPosition);
+	}
+
+	captureScrollPosition() {
+		const calendar = this.page.main.find(".pc-calendar").get(0);
+		const backlog = this.page.main.find(".planning-backlog-list").get(0);
+		return {
+			calendarTop: calendar?.scrollTop || 0,
+			calendarLeft: calendar?.scrollLeft || 0,
+			backlogTop: backlog?.scrollTop || 0,
+		};
+	}
+
+	restoreScrollPosition(position) {
+		window.requestAnimationFrame(() => {
+			const calendar = this.page.main.find(".pc-calendar").get(0);
+			const backlog = this.page.main.find(".planning-backlog-list").get(0);
+			if (calendar) {
+				calendar.scrollTop = position.calendarTop;
+				calendar.scrollLeft = position.calendarLeft;
+			}
+			if (backlog) backlog.scrollTop = position.backlogTop;
+		});
 	}
 
 	renderCalendarMenu() {

@@ -113,6 +113,7 @@ class ElectrixPlanning {
 	}
 
 	async load() {
+		const scrollPosition = this.captureScrollPosition();
 		this.closeActionsMenu();
 		this.page.main.html(`<div class="planning-loading">${__("Cargando planificación…")}</div>`);
 		const response = await frappe.call({
@@ -128,6 +129,29 @@ class ElectrixPlanning {
 		}
 		this.renderCalendarMenu();
 		this.render();
+		this.restoreScrollPosition(scrollPosition);
+	}
+
+	captureScrollPosition() {
+		const table = this.page.main.find(".planning-table-scroll").get(0);
+		const backlog = this.page.main.find(".planning-backlog-list").get(0);
+		return {
+			tableTop: table?.scrollTop || 0,
+			tableLeft: table?.scrollLeft || 0,
+			backlogTop: backlog?.scrollTop || 0,
+		};
+	}
+
+	restoreScrollPosition(position) {
+		window.requestAnimationFrame(() => {
+			const table = this.page.main.find(".planning-table-scroll").get(0);
+			const backlog = this.page.main.find(".planning-backlog-list").get(0);
+			if (table) {
+				table.scrollTop = position.tableTop;
+				table.scrollLeft = position.tableLeft;
+			}
+			if (backlog) backlog.scrollTop = position.backlogTop;
+		});
 	}
 
 	renderCalendarMenu() {
